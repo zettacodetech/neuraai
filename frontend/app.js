@@ -77,7 +77,15 @@ async function api(path, opts = {}) {
     headers: { "Content-Type": "application/json" },
     ...opts,
   });
-  const data = await res.json();
+  let data = null;
+  try {
+    data = await res.json();
+  } catch (e) {
+    throw Object.assign(
+      new Error("Server javob bera olmadi (" + res.status + "). Qayta urinib ko'ring."),
+      { status: res.status }
+    );
+  }
   if (!res.ok) throw Object.assign(new Error(data.error || "xato"), { status: res.status });
   return data;
 }

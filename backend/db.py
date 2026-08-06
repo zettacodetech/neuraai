@@ -162,11 +162,23 @@ class Database:
     # ================= ichki yordamchilar =================
     def _rows(self, sql: str, params: tuple = ()) -> list:
         if self.pg:
+            import datetime
+
             with self.conn.cursor(
                 cursor_factory=self._psycopg2.extras.RealDictCursor
             ) as cur:
                 cur.execute(_pg_sql(sql), params)
-                return cur.fetchall()
+                return [
+                    {
+                        k: (
+                            v.strftime("%Y-%m-%d %H:%M:%S")
+                            if isinstance(v, datetime.datetime)
+                            else v
+                        )
+                        for k, v in dict(r).items()
+                    }
+                    for r in cur.fetchall()
+                ]
         return self.conn.execute(sql, params).fetchall()
 
     def _row(self, sql: str, params: tuple = ()) -> dict | None:
