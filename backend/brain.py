@@ -231,7 +231,7 @@ class Brain:
 
     # ---------- javob ----------
     def answer(self, message: str, knowledge: list[dict]) -> tuple[str, str]:
-        """(javob, source) — source: intent | code | knowledge | websearch | fallback"""
+        """(javob, source) — source: intent | code | knowledge | websearch | llm | fallback"""
         intent = self._detect_intent(message)
         if intent:
             if intent["name"] == "code":
@@ -264,11 +264,48 @@ class Brain:
         if best and best[1] >= 2.0 and best[2] >= 0.4:
             return best[0]["answer"], "knowledge"
 
+        # Kuchaytirilgan yo'l: internet (Serper/DDG) + LLM (Groq/Z.AI)
         if os.environ.get("ENABLE_WEB_SEARCH", "1") == "1" and len(message) >= 10:
-            answer = search_answer(message)
-            if answer:
-                return answer, "websearch"
+            web_answer, context = self._web_search(message)
+            if context:
+                llm_reply = self._llm(message, context=context)
+                if llm_reply:
+                    return llm_reply, "llm"
+            if web_answer:
+                return web_answer, "websearch"
+
+        llm_reply = self._llm(message)
+        if llm_reply:
+            return llm_reply, "llm"
         return self._fallback(message), "fallback"
+
+    def _web_search(self, message: str) -> tuple[str, str]:
+        """(javob matni, LLM konteksti) — Serper bo'lmasa DDG."""
+        has_serper = False
+        serper_context_fn = None
+        try:
+            from serper import serper_available, serper_context
+
+            if serper_available():
+                has_serper = True
+                serper_context_fn = serper_context
+        except ImportError:
+            pass
+
+        if has_serper and serper_context_fn is not None:
+            context = serper_context_fn(message)
+            if context:
+                return "", context
+        answer = search_answer(message)
+        return answer or "", answer or ""
+
+    @staticmethod
+    def _llm(message: str, context: str | None = None) -> str | None:
+        try:
+            from llm import llm_answer
+        except ImportError:
+            return None
+        return llm_answer(message, context=context)
 
     def _retrieve(
         self, q_tokens: list[str], knowledge: list[dict]
