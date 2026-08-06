@@ -144,7 +144,32 @@ def _load_svd():
 
 
 def generate_image(prompt: str) -> str:
-    """Prompt'ga mos PNG yaratib, yo'lini qaytaradi (GPU → SDXL, aksida protsur)."""
+    """Prompt'ga mos PNG yaratib, yo'lini qaytaradi.
+
+    Tartib: deAPI (haqiqiy AI) → Magic Hour (haqiqiy AI) → GPU SDXL → protsur.
+    """
+    try:
+        from deapi import available as de_available
+        from deapi import generate_image as de_image
+
+        if de_available():
+            path = de_image(prompt)
+            if path:
+                return path
+    except Exception:
+        pass
+
+    try:
+        from magic import available as mh_available
+        from magic import generate_image as mh_image
+
+        if mh_available():
+            path = mh_image(prompt)
+            if path:
+                return path
+    except Exception:
+        pass
+
     seed = _seed(prompt)
     anyalon = int(time.time() * 1000)
     path = os.path.join(_OUT_DIR, f"img_{seed:08x}_{anyalon % 100000}.png")
@@ -163,7 +188,44 @@ def generate_image(prompt: str) -> str:
 
 
 def generate_video(prompt: str) -> str:
-    """Prompt'aga mosa qisqa video (MP4) yarat. GPU → SVD animatsiyasi."""
+    """Prompt'aga mos qisqa video (MP4) yarat.
+
+    Tartib: JSON2Video (real render) → deAPI (LTX-Video) → Magic Hour
+    (haqiqiy AI) → GPU SVD → protsur animatsiya.
+    """
+    try:
+        from json2video import available as j2v_available
+        from json2video import generate_video as j2v_video
+
+        if j2v_available():
+            path = j2v_video(prompt)
+            if path:
+                return path
+    except Exception:
+        pass
+
+    try:
+        from deapi import available as de_available
+        from deapi import generate_video as de_video
+
+        if de_available():
+            path = de_video(prompt)
+            if path:
+                return path
+    except Exception:
+        pass
+
+    try:
+        from magic import available as mh_available
+        from magic import generate_video as mh_video
+
+        if mh_available():
+            path = mh_video(prompt)
+            if path:
+                return path
+    except Exception:
+        pass
+
     seed = _seed(prompt)
     ts = int(time.time())
     path = os.path.join(_OUT_DIR, f"vid_{seed:08x}_{ts % 100000}.mp4")
@@ -218,4 +280,19 @@ def _write_mp4(path: str, frames: list[np.ndarray], fps: int = 24) -> None:
 
 
 def status() -> dict:
-    return {"gpu": _available(), "mode": "diffusion" if _available() else "procedural"}
+    def _flag(module: str) -> bool:
+        try:
+            import importlib
+
+            mod = importlib.import_module(module)
+            return bool(mod.available())
+        except Exception:
+            return False
+
+    return {
+        "gpu": _available(),
+        "mode": "diffusion" if _available() else "procedural",
+        "magic_hour": _flag("magic"),
+        "deapi": _flag("deapi"),
+        "json2video": _flag("json2video"),
+    }

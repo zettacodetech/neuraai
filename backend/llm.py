@@ -1,4 +1,4 @@
-"""Kuchaytirilgan javoblar — OpenAI-compatible LLM (Groq, OpenRouter, Z.AI va h.k.).
+"""Kuchaytirilgan javoblar — OpenAI-compatible LLM (Groq, OpenRouter, KIE va h.k.).
 
 Yangi modullarga bog'liq emas (faqat stdlib urllib). Kalitlar env orqali:
 - NEURA_LLM_API_KEY (yoki GROQ_API_KEY) — majburiy emas
@@ -6,9 +6,11 @@ Yangi modullarga bog'liq emas (faqat stdlib urllib). Kalitlar env orqali:
 - NEURA_LLM_MODEL     (standart: llama-3.3-70b-versatile)
 - OPENROUTER_API_KEY  — OpenRouter qo'shimcha provider (kuchli modellar, kam kredit)
 - OPENROUTER_MODEL    (standart: ~openai/gpt-latest)
+- KIE_API_KEY         — kie.ai agregatori (arzon, OpenAI-compatible, deepseek-chat)
+- KIE_API_KEY_2       — kie.ai ikkinchi kalit (zaxira)
 
-Provider tartibi: NEURA_LLM_PROVIDER env orqali tanlanadi (groq | openrouter | auto).
-'auto' da: OpenRouter kuchliroq model deb birinchi uriniladi, xato bo'lsa Groq.
+Provider tartibi: NEURA_LLM_PROVIDER env orqali tanlanadi (groq | openrouter | kie | auto).
+'auto' da: OpenRouter → KIE → Groq (kuchlidan arzonga zanjir).
 """
 
 import json
@@ -17,8 +19,10 @@ import urllib.request
 
 GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+KIE_BASE_URL = "https://api.kie.ai/api/v1"
 DEFAULT_GROQ_MODEL = "llama-3.3-70b-versatile"
 DEFAULT_OPENROUTER_MODEL = "~openai/gpt-latest"
+DEFAULT_KIE_MODEL = "deepseek-chat"
 
 LLM_TIMEOUT = float(os.environ.get("NEURA_LLM_TIMEOUT", "25"))
 
@@ -50,6 +54,11 @@ def _build_providers() -> list[_Provider]:
             )
         )
 
+    for env_name in ("KIE_API_KEY", "KIE_API_KEY_2"):
+        kie_key = os.environ.get(env_name, "").strip()
+        if kie_key:
+            providers.append(_Provider(KIE_BASE_URL, kie_key, DEFAULT_KIE_MODEL))
+
     groq_key = (
         os.environ.get("NEURA_LLM_API_KEY", "").strip()
         or os.environ.get("GROQ_API_KEY", "").strip()
@@ -68,7 +77,11 @@ def _build_providers() -> list[_Provider]:
         providers.sort(key=lambda p: p.base_url != GROQ_BASE_URL)
     elif mode == "openrouter":
         providers.sort(key=lambda p: p.base_url == GROQ_BASE_URL)
-    # auto: OpenRouter birinchi (kuchliroq), Groq zaxira
+    elif mode == "kie":
+        providers.sort(
+            key=lambda p: (p.base_url == GROQ_BASE_URL, p.base_url != KIE_BASE_URL)
+        )
+    # auto: OpenRouter → KIE → Groq (kuchlisi birinchi)
     return providers
 
 
