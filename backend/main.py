@@ -97,7 +97,8 @@ class RenameRequest(BaseModel):
 @app.on_event("startup")
 def startup() -> None:
     db = get_db()
-    db.add_seed_knowledge(SEED_KNOWLEDGE)
+    if os.environ.get("NEURA_USE_SEED_KNOWLEDGE", "0") == "1":
+        db.add_seed_knowledge(SEED_KNOWLEDGE)
     if os.environ.get("NEURA_BOT_EMBEDDED", "1") == "1":
         try:
             import bot
