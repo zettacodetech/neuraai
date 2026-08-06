@@ -6,3 +6,4 @@ pillow==11.0.0
 python-multipart==0.0.20
 numpy==2.5.1
 opencv-python-headless==5.0.0.93
+psycopg2-binary==2.9.12

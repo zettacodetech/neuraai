@@ -1,77 +1,194 @@
+"""Ma'lumotlar bazasi — SQLite (lokal) yoki PostgreSQL (Railway).
+
+`DATABASE_URL` muhit o'zgaruvchisi o'rnatilgan bo'lsa PostgreSQL ishlatiladi,
+aks holda SQLite (data/ai.db). Ikkala rejim ham bir xil API beradi.
+"""
+
 import os
 import sqlite3
 from threading import RLock
 
+DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
 DB_PATH = os.environ.get(
     "DB_PATH", os.path.join(os.path.dirname(__file__), "..", "data", "ai.db")
 )
 
+_SQLITE_DDL = """
+CREATE TABLE IF NOT EXISTS users (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    telegram_id   INTEGER UNIQUE,
+    client_id     TEXT UNIQUE,
+    username      TEXT UNIQUE,
+    password_hash TEXT,
+    name          TEXT,
+    token         TEXT,
+    created_at    TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS conversations (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    INTEGER NOT NULL,
+    title      TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS messages (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id         INTEGER NOT NULL,
+    conversation_id INTEGER,
+    role            TEXT NOT NULL,
+    text            TEXT NOT NULL,
+    rating          INTEGER,
+    source          TEXT,
+    created_at      TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS knowledge (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    question   TEXT UNIQUE,
+    answer     TEXT NOT NULL,
+    source     TEXT DEFAULT 'seed',
+    weight     INTEGER DEFAULT 1,
+    created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS unanswered (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    question   TEXT NOT NULL,
+    user_id    INTEGER,
+    answer     TEXT,
+    status     TEXT DEFAULT 'new',
+    created_at TEXT DEFAULT (datetime('now'))
+);
+"""
+
+_PG_DDL = [
+    """
+    CREATE TABLE IF NOT EXISTS users (
+        id            BIGSERIAL PRIMARY KEY,
+        telegram_id   BIGINT UNIQUE,
+        client_id     TEXT UNIQUE,
+        username      TEXT UNIQUE,
+        password_hash TEXT,
+        name          TEXT,
+        token         TEXT,
+        created_at    TIMESTAMPTZ DEFAULT now()
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS conversations (
+        id         BIGSERIAL PRIMARY KEY,
+        user_id    BIGINT NOT NULL,
+        title      TEXT,
+        created_at TIMESTAMPTZ DEFAULT now()
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS messages (
+        id              BIGSERIAL PRIMARY KEY,
+        user_id         BIGINT NOT NULL,
+        conversation_id BIGINT,
+        role            TEXT NOT NULL,
+        text            TEXT NOT NULL,
+        rating          INTEGER,
+        source          TEXT,
+        created_at      TIMESTAMPTZ DEFAULT now()
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS knowledge (
+        id         BIGSERIAL PRIMARY KEY,
+        question   TEXT UNIQUE,
+        answer     TEXT NOT NULL,
+        source     TEXT DEFAULT 'seed',
+        weight     INTEGER DEFAULT 1,
+        created_at TIMESTAMPTZ DEFAULT now()
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS unanswered (
+        id         BIGSERIAL PRIMARY KEY,
+        question   TEXT NOT NULL,
+        user_id    BIGINT,
+        answer     TEXT,
+        status     TEXT DEFAULT 'new',
+        created_at TIMESTAMPTZ DEFAULT now()
+    )
+    """,
+]
+
+
+def _pg_sql(sql: str) -> str:
+    """SQLite '?' placeholderlarini PostgreSQL '%s' ga o'tkazadi."""
+    return sql.replace("?", "%s")
+
 
 class Database:
-    def __init__(self, path: str = DB_PATH):
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        self.path = path
+    def __init__(self, path: str = DB_PATH, url: str = DATABASE_URL):
         self._lock = RLock()
-        self.conn = sqlite3.connect(path, check_same_thread=False, isolation_level=None)
-        self.conn.row_factory = sqlite3.Row
+        self.pg = bool(url)
+        if self.pg:
+            import psycopg2
+            import psycopg2.extras
+
+            self._psycopg2 = psycopg2
+            self.conn = psycopg2.connect(url, connect_timeout=10)
+            self.conn.autocommit = True
+        else:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            self.path = path
+            self.conn = sqlite3.connect(
+                path, check_same_thread=False, isolation_level=None
+            )
+            self.conn.row_factory = sqlite3.Row
         self._create_tables()
         self._migrate()
 
+    # ================= ichki yordamchilar =================
+    def _rows(self, sql: str, params: tuple = ()) -> list:
+        if self.pg:
+            with self.conn.cursor(
+                cursor_factory=self._psycopg2.extras.RealDictCursor
+            ) as cur:
+                cur.execute(_pg_sql(sql), params)
+                return cur.fetchall()
+        return self.conn.execute(sql, params).fetchall()
+
+    def _row(self, sql: str, params: tuple = ()) -> dict | None:
+        rows = self._rows(sql, params)
+        return rows[0] if rows else None
+
+    def _execute(self, sql: str, params: tuple = ()) -> None:
+        if self.pg:
+            with self.conn.cursor() as cur:
+                cur.execute(_pg_sql(sql), params)
+        else:
+            self.conn.execute(sql, params)
+
+    def _insert(self, sql: str, params: tuple = ()) -> int:
+        if self.pg:
+            with self.conn.cursor() as cur:
+                cur.execute(_pg_sql(sql) + " RETURNING id", params)
+                row = cur.fetchone()
+                assert row is not None
+                return int(row[0])
+        cur = self.conn.execute(sql, params)
+        assert cur.lastrowid is not None
+        return cur.lastrowid
+
     def _create_tables(self):
         with self._lock:
-            self.conn.executescript(
-                """
-                CREATE TABLE IF NOT EXISTS users (
-                    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-                    telegram_id   INTEGER UNIQUE,
-                    client_id     TEXT UNIQUE,
-                    username      TEXT UNIQUE,
-                    password_hash TEXT,
-                    name          TEXT,
-                    token         TEXT,
-                    created_at    TEXT DEFAULT (datetime('now'))
-                );
-
-                CREATE TABLE IF NOT EXISTS conversations (
-                    id         INTEGER PRIMARY KEY AUTOINCREMENT,
-                    user_id    INTEGER NOT NULL,
-                    title      TEXT,
-                    created_at TEXT DEFAULT (datetime('now'))
-                );
-
-                CREATE TABLE IF NOT EXISTS messages (
-                    id              INTEGER PRIMARY KEY AUTOINCREMENT,
-                    user_id         INTEGER NOT NULL,
-                    conversation_id INTEGER,
-                    role            TEXT NOT NULL,
-                    text            TEXT NOT NULL,
-                    rating          INTEGER,
-                    source          TEXT,
-                    created_at      TEXT DEFAULT (datetime('now'))
-                );
-
-                CREATE TABLE IF NOT EXISTS knowledge (
-                    id         INTEGER PRIMARY KEY AUTOINCREMENT,
-                    question   TEXT UNIQUE,
-                    answer     TEXT NOT NULL,
-                    source     TEXT DEFAULT 'seed',
-                    weight     INTEGER DEFAULT 1,
-                    created_at TEXT DEFAULT (datetime('now'))
-                );
-
-                CREATE TABLE IF NOT EXISTS unanswered (
-                    id         INTEGER PRIMARY KEY AUTOINCREMENT,
-                    question   TEXT NOT NULL,
-                    user_id    INTEGER,
-                    answer     TEXT,
-                    status     TEXT DEFAULT 'new',
-                    created_at TEXT DEFAULT (datetime('now'))
-                );
-                """
-            )
+            if self.pg:
+                for ddl in _PG_DDL:
+                    with self.conn.cursor() as cur:
+                        cur.execute(ddl)
+            else:
+                self.conn.executescript(_SQLITE_DDL)
 
     def _migrate(self):
-        """Eski DB'lardan yangi ustunlarni qo'shish."""
+        """Eski SQLite DB'lardan yangi ustunlarni qo'shish (Postgres kerak emas)."""
+        if self.pg:
+            return
         with self._lock:
             user_cols = [r[1] for r in self.conn.execute("PRAGMA table_info(users)")]
             for col in ("username", "password_hash", "name", "token"):
@@ -89,51 +206,41 @@ class Database:
     ) -> int:
         with self._lock:
             if client_id is not None:
-                cur = self.conn.execute(
+                row = self._row(
                     "SELECT id FROM users WHERE client_id = ?", (client_id,)
                 )
-                row = cur.fetchone()
                 if row:
                     return row["id"]
-                cur = self.conn.execute(
+                return self._insert(
                     "INSERT INTO users (client_id) VALUES (?)", (client_id,)
                 )
-                assert cur.lastrowid is not None
-                return cur.lastrowid
             if telegram_id is not None:
-                cur = self.conn.execute(
+                row = self._row(
                     "SELECT id FROM users WHERE telegram_id = ?", (telegram_id,)
                 )
-                row = cur.fetchone()
                 if row:
                     return row["id"]
-                cur = self.conn.execute(
+                return self._insert(
                     "INSERT INTO users (telegram_id) VALUES (?)", (telegram_id,)
                 )
-                assert cur.lastrowid is not None
-                return cur.lastrowid
-            cur = self.conn.execute("INSERT INTO users DEFAULT VALUES")
-            assert cur.lastrowid is not None
-            return cur.lastrowid
+            return self._insert("INSERT INTO users DEFAULT VALUES")
 
     def get_user(self, user_id: int) -> dict | None:
-        row = self.conn.execute(
+        row = self._row(
             "SELECT id, username, name, token, client_id FROM users WHERE id = ?",
             (user_id,),
-        ).fetchone()
+        )
         return dict(row) if row else None
 
     def get_user_by_token(self, token: str) -> dict | None:
-        row = self.conn.execute(
+        row = self._row(
             "SELECT id, username, name, token, client_id FROM users WHERE token = ?",
             (token,),
-        ).fetchone()
+        )
         return dict(row) if row else None
 
     def get_user_by_username(self, username: str) -> dict | None:
-        row = self.conn.execute(
-            "SELECT * FROM users WHERE username = ?", (username.lower(),)
-        ).fetchone()
+        row = self._row("SELECT * FROM users WHERE username = ?", (username.lower(),))
         return dict(row) if row else None
 
     def register_user(
@@ -147,62 +254,52 @@ class Database:
         if not username or not password_hash:
             return None
         with self._lock:
-            exists = self.conn.execute(
-                "SELECT id FROM users WHERE username = ?", (username,)
-            ).fetchone()
+            exists = self._row("SELECT id FROM users WHERE username = ?", (username,))
             if exists:
                 return None
-            cur = self.conn.execute(
+            new_id = self._insert(
                 "INSERT INTO users (username, password_hash, name) VALUES (?, ?, ?)",
                 (username, password_hash, name or username),
             )
-            assert cur.lastrowid is not None
-            new_id = cur.lastrowid
             if client_id:
-                guest = self.conn.execute(
+                guest = self._row(
                     "SELECT id FROM users WHERE client_id = ?", (client_id,)
-                ).fetchone()
+                )
                 if guest and guest["id"] != new_id:
                     gid = guest["id"]
-                    self.conn.execute(
+                    self._execute(
                         "UPDATE conversations SET user_id = ? WHERE user_id = ?",
                         (new_id, gid),
                     )
-                    self.conn.execute(
+                    self._execute(
                         "UPDATE messages SET user_id = ? WHERE user_id = ?",
                         (new_id, gid),
                     )
-                    self.conn.execute("DELETE FROM users WHERE id = ?", (gid,))
+                    self._execute("DELETE FROM users WHERE id = ?", (gid,))
             return new_id
 
     def set_token(self, user_id: int, token: str) -> None:
         with self._lock:
-            self.conn.execute(
-                "UPDATE users SET token = ? WHERE id = ?", (token, user_id)
-            )
+            self._execute("UPDATE users SET token = ? WHERE id = ?", (token, user_id))
 
     def update_name(self, user_id: int, name: str) -> None:
         with self._lock:
-            self.conn.execute("UPDATE users SET name = ? WHERE id = ?", (name, user_id))
+            self._execute("UPDATE users SET name = ? WHERE id = ?", (name, user_id))
 
     # ================= conversations =================
     def create_conversation(self, user_id: int, title: str) -> int:
         with self._lock:
-            cur = self.conn.execute(
+            return self._insert(
                 "INSERT INTO conversations (user_id, title) VALUES (?, ?)",
                 (user_id, title[:60] or "Yangi suhbat"),
             )
-            assert cur.lastrowid is not None
-            return cur.lastrowid
 
     def get_conversation(self, conv_id: int) -> dict | None:
-        row = self.conn.execute(
-            "SELECT * FROM conversations WHERE id = ?", (conv_id,)
-        ).fetchone()
+        row = self._row("SELECT * FROM conversations WHERE id = ?", (conv_id,))
         return dict(row) if row else None
 
     def list_conversations(self, user_id: int) -> list:
-        rows = self.conn.execute(
+        rows = self._rows(
             """
             SELECT c.id, c.title, c.created_at,
                    (SELECT count(*) FROM messages m WHERE m.conversation_id = c.id) AS msg_count
@@ -211,11 +308,11 @@ class Database:
             ORDER BY c.id DESC LIMIT 100
             """,
             (user_id,),
-        ).fetchall()
+        )
         return [dict(r) for r in rows]
 
     def conversation_messages(self, conv_id: int, user_id: int) -> list:
-        rows = self.conn.execute(
+        rows = self._rows(
             """
             SELECT id, role, text, rating, source, created_at
             FROM messages
@@ -223,7 +320,7 @@ class Database:
             ORDER BY id
             """,
             (conv_id, user_id),
-        ).fetchall()
+        )
         return [dict(r) for r in rows]
 
     # ================= messages =================
@@ -236,28 +333,24 @@ class Database:
         conversation_id: int | None = None,
     ) -> int:
         with self._lock:
-            cur = self.conn.execute(
+            return self._insert(
                 "INSERT INTO messages (user_id, role, text, source, conversation_id) "
                 "VALUES (?, ?, ?, ?, ?)",
                 (user_id, role, text, source, conversation_id),
             )
-            assert cur.lastrowid is not None
-            return cur.lastrowid
 
     def rate_message(self, message_id: int, rating: int) -> None:
         with self._lock:
-            self.conn.execute(
+            self._execute(
                 "UPDATE messages SET rating = ? WHERE id = ?", (rating, message_id)
             )
 
     def get_rating(self, message_id: int) -> int | None:
-        row = self.conn.execute(
-            "SELECT rating FROM messages WHERE id = ?", (message_id,)
-        ).fetchone()
+        row = self._row("SELECT rating FROM messages WHERE id = ?", (message_id,))
         return row["rating"] if row else None
 
     def recent_pairs(self, limit: int = 500):
-        rows = self.conn.execute(
+        rows = self._rows(
             """
             SELECT m1.user_id, m1.id AS q_id, m1.text AS q, m2.id AS a_id, m2.text AS a, m2.source
             FROM messages m1
@@ -266,14 +359,12 @@ class Database:
             ORDER BY m1.id DESC LIMIT ?
             """,
             (limit,),
-        ).fetchall()
+        )
         return [dict(r) for r in rows]
 
     # ================= knowledge =================
     def get_knowledge(self) -> list:
-        rows = self.conn.execute(
-            "SELECT id, question, answer, weight, source FROM knowledge"
-        ).fetchall()
+        rows = self._rows("SELECT id, question, answer, weight, source FROM knowledge")
         return [dict(r) for r in rows]
 
     def add_knowledge(self, question: str, answer: str, source: str = "admin") -> bool:
@@ -282,12 +373,12 @@ class Database:
             return False
         with self._lock:
             try:
-                self.conn.execute(
+                self._insert(
                     "INSERT INTO knowledge (question, answer, source) VALUES (?, ?, ?)",
                     (question, answer, source),
                 )
-            except sqlite3.IntegrityError:
-                self.conn.execute(
+            except Exception:
+                self._execute(
                     "UPDATE knowledge SET answer = ?, source = ? WHERE question = ?",
                     (answer, source, question),
                 )
@@ -299,33 +390,31 @@ class Database:
 
     # ================= unanswered =================
     def add_unanswered(self, question: str, user_id: int) -> None:
-        existing = self.conn.execute(
+        existing = self._row(
             "SELECT id FROM unanswered WHERE question = ? AND status = 'new' LIMIT 1",
             (question.strip(),),
-        ).fetchone()
+        )
         if existing:
             return
         with self._lock:
-            self.conn.execute(
+            self._execute(
                 "INSERT INTO unanswered (question, user_id) VALUES (?, ?)",
                 (question.strip(), user_id),
             )
 
     def get_unanswered(self, status: str = "new") -> list:
-        rows = self.conn.execute(
+        rows = self._rows(
             "SELECT * FROM unanswered WHERE status = ? ORDER BY created_at DESC LIMIT 200",
             (status,),
-        ).fetchall()
+        )
         return [dict(r) for r in rows]
 
     def answer_unanswered(self, unanswered_id: int, answer: str) -> None:
-        q = self.conn.execute(
-            "SELECT question FROM unanswered WHERE id = ?", (unanswered_id,)
-        ).fetchone()
+        q = self._row("SELECT question FROM unanswered WHERE id = ?", (unanswered_id,))
         if q is None:
             return
         with self._lock:
-            self.conn.execute(
+            self._execute(
                 "UPDATE unanswered SET answer = ?, status = 'answered' WHERE id = ?",
                 (answer, unanswered_id),
             )
