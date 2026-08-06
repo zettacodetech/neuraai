@@ -3,6 +3,8 @@ import sys
 import tempfile
 import threading
 import time
+import json
+import urllib.request
 
 # Railway/uvicorn da backend modullari (auth, brain...) shu papkadan topilsin
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -185,6 +187,48 @@ def gen_video(req: GenRequest) -> JSONResponse:
 @app.get("/api/gen/status")
 def gen_api_status() -> JSONResponse:
     return JSONResponse(gen_status())
+
+
+_version_cache: dict = {}
+
+
+@app.get("/api/version")
+def version() -> JSONResponse:
+    now = time.time()
+    if _version_cache and now - _version_cache["ts"] < 300:
+        return JSONResponse(_version_cache["data"])
+    data = {"version": "0", "apk_url": None, "size": None}
+    try:
+        headers = {"User-Agent": "Mozilla/5.0", "Accept": "application/vnd.github+json"}
+        tok = os.environ.get("GITHUB_TOKEN", "").strip()
+        if tok:
+            headers["Authorization"] = f"Bearer {tok}"
+        req = urllib.request.Request(
+            "https://api.github.com/repos/zettacodetech/neuraai/releases/latest",
+            headers=headers,
+        )
+        with urllib.request.urlopen(req, timeout=10) as r:
+            rel = json.loads(r.read().decode())
+        asset = next(
+            (a for a in rel.get("assets", []) if a.get("name", "").endswith(".apk")),
+            None,
+        )
+        data = {
+            "version": rel.get("tag_name", "").lstrip("v"),
+            "apk_url": asset["browser_download_url"] if asset else None,
+            "size": asset["size"] if asset else None,
+            "published": rel.get("published_at", ""),
+        }
+    except Exception:
+        data = {
+            "version": "1.0.0",
+            "apk_url": "https://github.com/zettacodetech/neuraai/releases/latest/download/neuraai.apk",
+            "size": 26887547,
+            "published": "",
+        }
+    _version_cache["ts"] = now
+    _version_cache["data"] = data
+    return JSONResponse(data)
 
 
 # ================= suhbat =================
