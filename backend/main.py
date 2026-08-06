@@ -7,6 +7,16 @@ import time
 # Railway/uvicorn da backend modullari (auth, brain...) shu papkadan topilsin
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+# .env faylini yuklash (lokalda token/flaglar shu yerda turadi, repo'ga kirmaydi)
+_ENV_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+if os.path.exists(_ENV_PATH):
+    with open(_ENV_PATH, encoding="utf-8") as _f:
+        for _line in _f:
+            _line = _line.strip()
+            if _line and not _line.startswith("#") and "=" in _line:
+                _k, _v = _line.split("=", 1)
+                os.environ.setdefault(_k.strip(), _v.strip())
+
 from fastapi import FastAPI, File, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -69,6 +79,13 @@ class RenameRequest(BaseModel):
 def startup() -> None:
     db = get_db()
     db.add_seed_knowledge(SEED_KNOWLEDGE)
+    if os.environ.get("NEURA_BOT_EMBEDDED", "1") == "1":
+        try:
+            import bot
+
+            bot.start_bot_in_thread()
+        except Exception as exc:
+            print(f"[startup] bot ishga tushmadi: {exc}")
 
 
 def _auto_learn_loop() -> None:

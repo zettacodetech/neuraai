@@ -6,9 +6,11 @@ Ishga tushirish:
 @BotFather dan token oling. Bot sayt bilan BIR xil DB va miyadan foydalanadi.
 """
 
+import asyncio
 import logging
 import os
 import tempfile
+import threading
 
 # .env faylini yuklash (tokenni repo'ga yozmaslik uchun)
 _ENV_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
@@ -38,8 +40,6 @@ from vision import analyze as analyze_image
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
 TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
-if not TOKEN:
-    raise SystemExit("TELEGRAM_BOT_TOKEN muhit o'zgaruvchisi kerak!")
 
 # Telegram foydalanuvchisi -> joriy suhbat id (xotira)
 current_conv: dict[int, int] = {}
@@ -203,7 +203,7 @@ async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         os.unlink(path)
 
 
-def main() -> None:
+def _build_app() -> Application:
     app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_cmd))
@@ -211,8 +211,37 @@ def main() -> None:
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_message))
     app.add_handler(MessageHandler(filters.PHOTO, on_photo))
     app.add_handler(CallbackQueryHandler(on_callback))
+    return app
+
+
+def start_bot_in_thread() -> None:
+    """FastAPI (Railway) ichida botni alohida thread'da ishga tushiradi."""
+    if not TOKEN:
+        logging.warning("TELEGRAM_BOT_TOKEN o'rnatilmagan — bot ishga tushmaydi")
+        return
+
+    def _run() -> None:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            logging.info("Neura AI bot ishga tushdi (thread)")
+            _build_app().run_polling()
+        except Exception as exc:
+            logging.error("Bot to'xtadi: %s", exc)
+        finally:
+            try:
+                loop.close()
+            except Exception:
+                pass
+
+    threading.Thread(target=_run, daemon=True, name="telegram-bot").start()
+
+
+def main() -> None:
+    if not TOKEN:
+        raise SystemExit("TELEGRAM_BOT_TOKEN muhit o'zgaruvchisi kerak!")
     logging.info("Neura AI bot ishga tushdi")
-    app.run_polling()
+    _build_app().run_polling()
 
 
 if __name__ == "__main__":
