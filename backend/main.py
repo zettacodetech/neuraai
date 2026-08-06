@@ -356,6 +356,198 @@ async def analyze_image(file: UploadFile = File(...)) -> JSONResponse:
     return JSONResponse(data)
 
 
+# ================= Vision (Ollama) =================
+
+
+class VisionRequest(BaseModel):
+    image: str  # base64
+    prompt: str = (
+        "Ushbu rasmni tahlil qilib, undagi narsalarni o'zbekcha batafsil tushuntir."
+    )
+
+
+@app.post("/api/vision")
+async def vision_analyze_ollama(req: VisionRequest) -> JSONResponse:
+    """Ollama vision model (llama3.2-vision) orqali rasm tahlili."""
+    try:
+        import llm
+
+        # Ollama provider ni topish
+        ollama_provider = None
+        for p in llm.LLM_PROVIDERS:
+            if isinstance(p, llm._OllamaProvider):
+                ollama_provider = p
+                break
+
+        if not ollama_provider or not ollama_provider.available:
+            # Ollama yo'q — local yuklash uchun ko'rsatma
+            return JSONResponse(
+                {
+                    "error": "Ollama server topilmadi. Lokalda: `ollama pull llama3.2-vision && ollama serve`",
+                    "hint": "Railwayda: Ollama service deploy qiling (GPU bilan).",
+                },
+                status_code=503,
+            )
+
+        # Vision model uchun alohida model nomi
+        vision_model = os.environ.get("OLLAMA_VISION_MODEL", "llama3.2-vision")
+        orig_model = ollama_provider.model
+        ollama_provider.model = vision_model
+
+        try:
+            result = ollama_provider.chat(
+                messages=[{"role": "user", "content": req.prompt}],
+                images=[req.image],
+                temperature=0.3,
+                max_tokens=800,
+            )
+        finally:
+            ollama_provider.model = orig_model
+
+        if not result:
+            return JSONResponse(
+                {"error": "Vision model javob bermadi"}, status_code=500
+            )
+
+        return JSONResponse(
+            {"success": True, "analysis": result, "model": vision_model}
+        )
+    except Exception as e:
+        return JSONResponse({"error": f"Vision xato: {e}"}, status_code=500)
+
+
+# ================= Musiqa generatsiya (Suno API) =================
+
+
+class MusicRequest(BaseModel):
+    prompt: str  # Qo'shiq mavzusi/matni
+    tags: str = "pop, uzbek, energetic"
+    title: str = "NeuraAI Track"
+    instrumental: bool = False
+
+
+@app.post("/api/generate-music")
+async def generate_music(req: MusicRequest) -> JSONResponse:
+    """Suno API (lokal yoki bulut) orqali musiqa generatsiya."""
+    suno_url = os.environ.get("SUNO_API_URL", "http://localhost:3000/api/generate")
+    try:
+        import urllib.request
+        import json
+
+        payload = json.dumps(
+            {
+                "prompt": req.prompt,
+                "tags": req.tags,
+                "title": req.title,
+                "make_instrumental": req.instrumental,
+                "wait_audio": True,
+            }
+        ).encode()
+
+        req_obj = urllib.request.Request(
+            suno_url,
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req_obj, timeout=120) as r:
+            data = json.loads(r.read().decode())
+
+        # Suno response: [{"audio_url": "..."}]
+        audio_url = data[0].get("audio_url") if data else None
+        return JSONResponse({"success": True, "audio_url": audio_url})
+    except Exception as e:
+        return JSONResponse(
+            {
+                "error": f"Musiqa generatsiya xato: {e}",
+                "hint": "Lokal Suno API: `git clone https://github.com/suno-ai/suno-api && cd suno-api && npm install && npm start` (port 3000)",
+            },
+            status_code=503,
+        )
+
+
+# ================= Canvas / Dizayn shablonlari =================
+
+
+class CanvasTemplate(BaseModel):
+    id: int
+    name: str
+    width: int
+    height: int
+    category: str = "general"
+
+
+@app.get("/api/canvas/templates")
+async def canvas_templates() -> JSONResponse:
+    """Canva/Excalidraw kabi dizayn platformasi uchun shablonlar."""
+    templates = [
+        {
+            "id": 1,
+            "name": "Instagram Post",
+            "width": 1080,
+            "height": 1080,
+            "category": "social",
+        },
+        {
+            "id": 2,
+            "name": "Instagram Story",
+            "width": 1080,
+            "height": 1920,
+            "category": "social",
+        },
+        {
+            "id": 3,
+            "name": "YouTube Thumbnail",
+            "width": 1280,
+            "height": 720,
+            "category": "social",
+        },
+        {
+            "id": 4,
+            "name": "A4 Hujjat",
+            "width": 2480,
+            "height": 3508,
+            "category": "document",
+        },
+        {
+            "id": 5,
+            "name": "Prezentatsiya (16:9)",
+            "width": 1920,
+            "height": 1080,
+            "category": "document",
+        },
+        {
+            "id": 6,
+            "name": "Logo (Kvadrat)",
+            "width": 512,
+            "height": 512,
+            "category": "branding",
+        },
+        {
+            "id": 7,
+            "name": "Vizitka",
+            "width": 1050,
+            "height": 600,
+            "category": "branding",
+        },
+        {
+            "id": 8,
+            "name": "Twitter Header",
+            "width": 1500,
+            "height": 500,
+            "category": "social",
+        },
+        {
+            "id": 9,
+            "name": "LinkedIn Post",
+            "width": 1200,
+            "height": 628,
+            "category": "social",
+        },
+    ]
+    return JSONResponse({"templates": templates})
+
+
 # ================= hisob (registratsiya / kirish) =================
 
 

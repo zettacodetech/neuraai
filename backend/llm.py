@@ -20,9 +20,35 @@ import urllib.request
 GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 KIE_BASE_URL = "https://api.kie.ai/api/v1"
+GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
 DEFAULT_GROQ_MODEL = "llama-3.3-70b-versatile"
 DEFAULT_OPENROUTER_MODEL = "~openai/gpt-latest"
 DEFAULT_KIE_MODEL = "deepseek-chat"
+DEFAULT_GEMINI_MODEL = "gemini-1.5-flash"
+
+# Mavjud Gemini modellar (Google API da) — eng kuchlisi birinchi:
+# https://ai.google.dev/gemini-api/docs/models/gemini
+GEMINI_MODELS = [
+    "gemini-1.5-pro",  # Eng kuchli, murakkab vazifalar uchun
+    "gemini-1.5-pro-002",  # Yangilangan Pro (sentyabr 2024)
+    "gemini-1.5-flash",  # Tez va arzon, ko'pgina vazifalar uchun
+    "gemini-1.5-flash-002",  # Yangilangan Flash
+    "gemini-1.0-pro",  # Eski avlod Pro
+    "gemini-1.0-pro-vision",  # Multimodal (rasm+matn) — eski
+]
+
+
+def _resolve_gemini_model(name: str) -> str:
+    """Foydalanuvchi kiritgan nomi ro'yxatda bo'lmasa, default qaytaradi."""
+    if not name:
+        return DEFAULT_GEMINI_MODEL
+    if name in GEMINI_MODELS:
+        return name
+    for m in GEMINI_MODELS:
+        if name.lower() in m.lower() or m.lower() in name.lower():
+            return m
+    return DEFAULT_GEMINI_MODEL
+
 
 LLM_TIMEOUT = float(os.environ.get("NEURA_LLM_TIMEOUT", "25"))
 
@@ -41,9 +67,136 @@ class _Provider:
         return bool(self.api_key.strip())
 
 
-def _build_providers() -> list[_Provider]:
-    providers: list[_Provider] = []
+class _GeminiProvider:
+    """Google Generative Language API — format OpenAI-compatible emas."""
 
+    def __init__(self, api_key: str, model: str):
+        self.api_key = api_key
+        self.model = model
+
+    @property
+    def available(self) -> bool:
+        return bool(self.api_key.strip())
+
+    def chat(
+        self, messages: list[dict], temperature: float = 0.4, max_tokens: int = 600
+    ) -> str | None:
+        # Gemini format: contents[{role, parts[{text}]}]
+        contents = []
+        for m in messages:
+            role = "user" if m["role"] == "user" else "model"
+            contents.append({"role": role, "parts": [{"text": m["content"]}]})
+        payload = {
+            "contents": contents,
+            "generationConfig": {
+                "temperature": temperature,
+                "maxOutputTokens": max_tokens,
+            },
+        }
+        url = (
+            f"{GEMINI_BASE_URL}/models/{self.model}:generateContent?key={self.api_key}"
+        )
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode(),
+            headers={"Content-Type": "application/json"},
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=LLM_TIMEOUT) as r:
+                data = json.loads(r.read().decode())
+            cand = data.get("candidates", [{}])[0]
+            return cand.get("content", {}).get("parts", [{}])[0].get("text")
+        except Exception:
+            return None
+
+
+class _OllamaProvider:
+    """Lokal Ollama server (API key kerak emas). Vision ham qo'llab-quvvatlanadi."""
+
+    def __init__(self, base_url: str = None, model: str = None):
+        self.base_url = base_url or os.environ.get(
+            "OLLAMA_BASE_URL", "http://localhost:11434"
+        )
+        self.model = model or os.environ.get("OLLAMA_MODEL", "llama3.3:8b")
+
+    @property
+    def available(self) -> bool:
+        try:
+            req = urllib.request.Request(f"{self.base_url}/api/tags", method="GET")
+            with urllib.request.urlopen(req, timeout=3) as r:
+                return r.status == 200
+        except Exception:
+            return False
+
+    def chat(
+        self,
+        messages: list[dict],
+        temperature: float = 0.4,
+        max_tokens: int = 600,
+        images: list[str] = None,
+    ) -> str | None:
+        # Ollama format: messages + images (base64)
+        ollama_messages = []
+        for m in messages:
+            content = m["content"]
+            role = m["role"]
+            if role == "system":
+                ollama_messages.append({"role": "system", "content": content})
+            elif role == "user":
+                msg = {"role": "user", "content": content}
+                if images:
+                    msg["images"] = images
+                ollama_messages.append(msg)
+            else:
+                ollama_messages.append({"role": "assistant", "content": content})
+
+        payload = {
+            "model": self.model,
+            "messages": ollama_messages,
+            "stream": False,
+            "options": {"temperature": temperature, "num_predict": max_tokens},
+        }
+        url = f"{self.base_url}/api/chat"
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode(),
+            headers={"Content-Type": "application/json"},
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=LLM_TIMEOUT) as r:
+                data = json.loads(r.read().decode())
+            return data.get("message", {}).get("content")
+        except Exception:
+            return None
+
+
+class _DuckDuckGoProvider:
+    """DuckDuckGo AI Chat — API key kerak emas, GPT-4o-mini / Claude-3-haiku."""
+
+    def __init__(self, model: str = "gpt-4o-mini"):
+        self.model = model  # gpt-4o-mini, claude-3-haiku, llama-3.1-70b, mixtral-8x7b
+
+    @property
+    def available(self) -> bool:
+        return True  # Hechqachon o'chmaydi
+
+    def chat(
+        self, messages: list[dict], temperature: float = 0.4, max_tokens: int = 600
+    ) -> str | None:
+        # DuckDuckGo AI Chat HTML scraping / hidden API
+        # Bu soddalashtirilgan — real implementatsiya uchun DDG tokenlari kerak
+        # Hozircha placeholder — oddiyroq: hech narsa qilmaymiz, None qaytarib keyingi providerga o'tamiz
+        return None
+
+
+def _build_providers() -> list:
+    providers: list = []
+
+    # 1. DuckDuckGo (bepul, API key kerak emas) — birinchi urinish
+    ddg_model = os.environ.get("DDG_MODEL", "gpt-4o-mini")
+    providers.append(_DuckDuckGoProvider(ddg_model))
+
+    # 2. OpenRouter
     openrouter_key = os.environ.get("OPENROUTER_API_KEY", "").strip()
     if openrouter_key:
         providers.append(
@@ -54,11 +207,28 @@ def _build_providers() -> list[_Provider]:
             )
         )
 
+    # 3. KIE
     for env_name in ("KIE_API_KEY", "KIE_API_KEY_2"):
         kie_key = os.environ.get(env_name, "").strip()
         if kie_key:
             providers.append(_Provider(KIE_BASE_URL, kie_key, DEFAULT_KIE_MODEL))
 
+    # 4. Gemini
+    gemini_key = os.environ.get("GEMINI_API_KEY", "").strip()
+    if gemini_key:
+        providers.append(
+            _GeminiProvider(
+                gemini_key,
+                _resolve_gemini_model(os.environ.get("GEMINI_MODEL", "")),
+            )
+        )
+
+    # 5. Ollama (lokal, API key kerak emas, vision qo'llab-quvvatlanadi)
+    ollama_url = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
+    ollama_model = os.environ.get("OLLAMA_MODEL", "llama3.3:8b")
+    providers.append(_OllamaProvider(ollama_url, ollama_model))
+
+    # 6. Groq
     groq_key = (
         os.environ.get("NEURA_LLM_API_KEY", "").strip()
         or os.environ.get("GROQ_API_KEY", "").strip()
@@ -81,7 +251,13 @@ def _build_providers() -> list[_Provider]:
         providers.sort(
             key=lambda p: (p.base_url == GROQ_BASE_URL, p.base_url != KIE_BASE_URL)
         )
-    # auto: OpenRouter → KIE → Groq (kuchlisi birinchi)
+    elif mode == "gemini":
+        providers.sort(key=lambda p: not isinstance(p, _GeminiProvider))
+    elif mode == "ollama":
+        providers.sort(key=lambda p: not isinstance(p, _OllamaProvider))
+    elif mode == "duckduckgo":
+        providers.sort(key=lambda p: not isinstance(p, _DuckDuckGoProvider))
+    # auto: DuckDuckGo → OpenRouter → KIE → Gemini → Ollama → Groq
     return providers
 
 
