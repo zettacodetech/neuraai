@@ -5,6 +5,8 @@ Ishlatish:
     ./venv/bin/python cli.py "Savolingiz"
     ./venv/bin/python cli.py --chat        # interaktiv suhbat
     ./venv/bin/python cli.py --image rasm.jpg   # rasm tahlili
+    ./venv/bin/python cli.py --gen-image "kosmos"   # rasm yaratish
+    ./venv/bin/python cli.py --gen-video "panorama" # video yaratish
     ./venv/bin/python cli.py --stats       # bilim bazasi statistikasi
 """
 
@@ -89,6 +91,10 @@ def main() -> None:
     group.add_argument("message", nargs="?", help="bir martalik savol")
     group.add_argument("--chat", action="store_true", help="interaktiv suhbat")
     group.add_argument("--image", metavar="PATH", help="rasm tahlili")
+    group.add_argument("--gen-image", metavar="PROMPT", help="prompt'dan rasm yaratish")
+    group.add_argument(
+        "--gen-video", metavar="PROMPT", help="prompt'dan video yaratish"
+    )
     group.add_argument("--stats", action="store_true", help="statistika")
     args = parser.parse_args()
 
@@ -98,6 +104,15 @@ def main() -> None:
         from vision import analyze
 
         print(json.dumps(analyze(args.image), ensure_ascii=False, indent=2))
+    elif args.gen_image or args.gen_video:
+        from gen import generate_image, generate_video
+
+        if args.gen_image:
+            path = generate_image(args.gen_image)
+            print(f"Rasm tayyor: {path}")
+        else:
+            path = generate_video(args.gen_video)
+            print(f"Video tayyor: {path}")
     elif args.stats:
         stats()
     elif args.message:

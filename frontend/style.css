@@ -309,6 +309,20 @@ body {
 }
 .row.user .bubble img { border-color: rgba(255,255,255,0.2); }
 
+.gen-dl {
+  display: inline-block;
+  margin-top: 8px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--card-solid);
+  color: var(--accent-2);
+  font-size: 12.5px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.gen-dl:hover { border-color: var(--accent); background: rgba(124, 108, 255, 0.12); }
+
 /* typing */
 .typing-dots { display: inline-flex; gap: 5px; padding: 6px 2px; }
 .typing-dots span { width: 8px; height: 8px; border-radius: 50%; background: var(--accent-2); animation: bounce 1.2s infinite; }

@@ -98,6 +98,48 @@ function qImage(row, role, url, caption) {
   return row;
 }
 
+function qMedia(url, isVideo, caption) {
+  const row = document.createElement("div");
+  row.className = "row ai";
+  const av = document.createElement("div");
+  av.className = "avatar";
+  av.textContent = "✦";
+  row.appendChild(av);
+  const b = document.createElement("div");
+  b.className = "bubble";
+  if (isVideo) {
+    const v = document.createElement("video");
+    v.src = url;
+    v.controls = true;
+    v.loop = true;
+    v.muted = true;
+    v.autoplay = false;
+    v.style.maxWidth = "100%";
+    v.style.maxHeight = "300px";
+    v.style.borderRadius = "10px";
+    b.appendChild(v);
+  } else {
+    const img = document.createElement("img");
+    img.src = url;
+    img.alt = "generated";
+    b.appendChild(img);
+  }
+  const cap = document.createElement("div");
+  cap.className = "img-cap";
+  cap.textContent = caption;
+  b.appendChild(cap);
+  const dl = document.createElement("a");
+  dl.className = "gen-dl";
+  dl.href = url;
+  dl.download = "";
+  dl.textContent = "⬇ Yuklab olish";
+  b.appendChild(dl);
+  row.appendChild(b);
+  chat.appendChild(row);
+  chat.scrollTop = chat.scrollHeight;
+  return row;
+}
+
 function qMessage(role, text) {
   const row = document.createElement("div");
   row.className = "row " + role;
@@ -238,13 +280,46 @@ async function sendImage(file) {
     const fd = new FormData();
     fd.append("file", file);
     const res = await fetch("/api/analyze-image", { method: "POST", body: fd });
+const data = await res.json();
+    if (!res.ok) throw Object.assign(new Error(data.error || "xato"), { status: res.status });
+    typing.remove();
+    qMedia(data.url, kind === "video", q.prompt);
+  } catch (e) {
+    typing.remove();
+    qMessage("ai", "⚠️ Generatsiya xatosi: " + (e.message || "qayta urinib ko'ring"));
+  }
+  sending = false;
+  sendBtn.disabled = false;
+  input.focus();
+}
+
+/* ================= generatsiya (rasm/video) ================= */
+
+async function genArt(kind) {
+  if (sending) return;
+  const q = prompt(kind === "image" ? "Rasm uchun tasvif yozing:" : "Video uchun tasvif yozing:", "tog'lar va quyosh botishi");
+  if (!q || !q.trim()) return;
+  sending = true;
+  sendBtn.disabled = true;
+  hideChips();
+
+  const label = (kind === "image" ? "🎨 Rasm: " : "🎬 Video: ");
+  qMessage("user", label + q.trim());
+  const typing = typingRow();
+
+  try {
+    const res = await fetch("/api/gen/" + kind, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: q.trim() }),
+    });
     const data = await res.json();
     if (!res.ok) throw Object.assign(new Error(data.error || "xato"), { status: res.status });
     typing.remove();
-    const arow = qMessage("ai", formatAnalysis(data));
+    qMedia(data.url, kind === "video", q.trim());
   } catch (e) {
     typing.remove();
-    qMessage("ai", "⚠️ Rasmni tahlil qilib bo'lmadi: " + (e.message || "xato"));
+    qMessage("ai", "⚠️ Generatsiya xatosi: " + (e.message || "qayta urinib ko'ring"));
   }
   sending = false;
   sendBtn.disabled = false;
@@ -395,6 +470,7 @@ chipsBox.addEventListener("click", (e) => {
   const chip = e.target.closest(".chip");
   if (!chip) return;
   if (chip.dataset.action === "image") fileInput.click();
+  else if (chip.dataset.gen) genArt(chip.dataset.gen);
   else send(chip.dataset.q);
 });
 

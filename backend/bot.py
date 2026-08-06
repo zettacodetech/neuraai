@@ -32,6 +32,7 @@ from telegram.ext import (
 
 from brain import brain
 from db import get_db
+from gen import generate_image, generate_video
 from vision import analyze as analyze_image
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -87,6 +88,28 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     tg_id = update.effective_user.id
     text = update.message.text.strip()
     if not text:
+        return
+
+    low = text.lower()
+    if any(
+        k in low for k in ("rasm yarat", "rasm chiz", "logotip yarat", "suret yarat")
+    ):
+        await update.message.reply_text("🎨 Rasm tayyorlanmoqda...")
+        try:
+            path = generate_image(text)
+            with open(path, "rb") as f:
+                await update.message.reply_photo(f, caption=f"🎨 {text[:80]}")
+        except Exception as e:
+            await update.message.reply_text(f"Rasm yarata olmadim: {e}")
+        return
+    if any(k in low for k in ("video yarat", "video tayorla", "animatsiya yarat")):
+        await update.message.reply_text("🎬 Video tayyorlanmoqda...")
+        try:
+            path = generate_video(text)
+            with open(path, "rb") as f:
+                await update.message.reply_video(f, caption=f"🎬 {text[:80]}")
+        except Exception as e:
+            await update.message.reply_text(f"Video yarata olmadim: {e}")
         return
 
     db = get_db()

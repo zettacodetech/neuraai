@@ -4,3 +4,5 @@ pydantic==2.10.4
 python-telegram-bot==21.10
 pillow==11.0.0
 python-multipart==0.0.20
+numpy==2.5.1
+opencv-python-headless==5.0.0

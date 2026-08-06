@@ -1,7 +1,11 @@
 import os
+import sys
 import tempfile
 import threading
 import time
+
+# Railway/uvicorn da backend modullari (auth, brain...) shu papkadan topilsin
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from fastapi import FastAPI, File, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
@@ -11,6 +15,7 @@ from pydantic import BaseModel
 from auth import hash_password, new_token, verify_password
 from brain import brain
 from db import get_db
+from gen import generate_image, generate_video, status as gen_status
 from learning import collect_unanswered, learn_from_messages, learn_pair
 from seeds import SEED_KNOWLEDGE
 from vision import analyze as vision_analyze
@@ -92,6 +97,43 @@ def sw() -> FileResponse:
 
 
 app.mount("/static", StaticFiles(directory=FRONTEND), name="static")
+
+
+# ================= generatsiya (Faza 5) =================
+
+
+class GenRequest(BaseModel):
+    prompt: str
+
+
+GEN_DIR = os.environ.get("GEN_OUT_DIR", os.path.join(ROOT, "data", "gen"))
+os.makedirs(GEN_DIR, exist_ok=True)
+app.mount("/generated", StaticFiles(directory=GEN_DIR), name="generated")
+
+
+def _gen_url(path: str) -> str:
+    return "/generated/" + os.path.basename(path)
+
+
+@app.post("/api/gen/image")
+def gen_image(req: GenRequest) -> JSONResponse:
+    if len(req.prompt.strip()) < 2:
+        return JSONResponse({"error": "prompt kamida 2 belgi"}, status_code=400)
+    path = generate_image(req.prompt.strip())
+    return JSONResponse({"url": _gen_url(path), "prompt": req.prompt.strip()})
+
+
+@app.post("/api/gen/video")
+def gen_video(req: GenRequest) -> JSONResponse:
+    if len(req.prompt.strip()) < 2:
+        return JSONResponse({"error": "prompt kamida 2 belgi"}, status_code=400)
+    path = generate_video(req.prompt.strip())
+    return JSONResponse({"url": _gen_url(path), "prompt": req.prompt.strip()})
+
+
+@app.get("/api/gen/status")
+def gen_api_status() -> JSONResponse:
+    return JSONResponse(gen_status())
 
 
 # ================= suhbat =================
