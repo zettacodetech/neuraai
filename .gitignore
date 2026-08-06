@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.pyc
+backend/venv/
+.venv/
+
+# Secrets — HEЧ QACHON commit qilmasin
+backend/.env
+.env
+
+# Ma'lumotlar (foydalanuvchi suhbatlari)
+data/
+
+# Loglar
+*.log
+/tmp/*
+
+# OS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+pyrightconfig.json

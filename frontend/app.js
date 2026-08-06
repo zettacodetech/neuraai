@@ -1,0 +1,460 @@
+const chat = document.getElementById("chat");
+const input = document.getElementById("input");
+const sendBtn = document.getElementById("sendBtn");
+const chipsBox = document.getElementById("chips");
+const fileInput = document.getElementById("fileInput");
+
+const sidebar = document.getElementById("sidebar");
+const overlay = document.getElementById("overlay");
+const menuBtn = document.getElementById("menuBtn");
+const convList = document.getElementById("convList");
+const convEmpty = document.getElementById("convEmpty");
+const newChatBtn = document.getElementById("newChatBtn");
+const sideUser = document.getElementById("sideUser");
+
+const authBackdrop = document.getElementById("authBackdrop");
+const modalClose = document.getElementById("modalClose");
+const modalTitle = document.getElementById("modalTitle");
+const modalSub = document.getElementById("modalSub");
+const authForm = document.getElementById("authForm");
+const authError = document.getElementById("authError");
+const authSubmit = document.getElementById("authSubmit");
+const nameField = document.getElementById("nameField");
+const fName = document.getElementById("fName");
+const fUsername = document.getElementById("fUsername");
+const fPassword = document.getElementById("fPassword");
+
+/* ================= holat ================= */
+
+let me = null;            // {token, username, name} | null
+let currentConv = null;   // ochiq suhbat id (null = yangi)
+let sending = false;
+
+function uid() {
+  let id = localStorage.getItem("neura_uid");
+  if (!id) {
+    id = "u" + Date.now() + Math.random().toString(36).slice(2, 10);
+    localStorage.setItem("neura_uid", id);
+  }
+  return id;
+}
+const CLIENT_ID = uid();
+
+function esc(t) {
+  const d = document.createElement("div");
+  d.textContent = t;
+  return d.innerHTML;
+}
+
+function fmtDate(iso) {
+  try {
+    const d = new Date(iso.replace(" ", "T") + "Z");
+    return d.toLocaleDateString("uz-UZ", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  } catch (e) {
+    return iso.slice(0, 10);
+  }
+}
+
+/* ================= API ================= */
+
+async function api(path, opts = {}) {
+  const res = await fetch(path, {
+    headers: { "Content-Type": "application/json" },
+    ...opts,
+  });
+  const data = await res.json();
+  if (!res.ok) throw Object.assign(new Error(data.error || "xato"), { status: res.status });
+  return data;
+}
+
+/* ================= xabarlar ================= */
+
+function renderText(text) {
+  const parts = text.split(/```/);
+  let html = "";
+  parts.forEach((p, i) => {
+    if (i % 2 === 1) html += "<pre>" + esc(p) + "</pre>";
+    else html += esc(p).replace(/\n/g, "<br>");
+  });
+  return html;
+}
+
+function qImage(row, role, url, caption) {
+  const b = document.createElement("div");
+  b.className = "bubble " + role;
+  const img = document.createElement("img");
+  img.src = url;
+  img.alt = "rasm";
+  b.appendChild(img);
+  if (caption) {
+    const c = document.createElement("div");
+    c.className = "img-cap";
+    c.textContent = caption;
+    b.appendChild(c);
+  }
+  row.appendChild(b);
+  chat.appendChild(row);
+  chat.scrollTop = chat.scrollHeight;
+  return row;
+}
+
+function qMessage(role, text) {
+  const row = document.createElement("div");
+  row.className = "row " + role;
+  if (role === "ai") {
+    const av = document.createElement("div");
+    av.className = "avatar";
+    av.textContent = "✦";
+    row.appendChild(av);
+  }
+  const b = document.createElement("div");
+  b.className = "bubble";
+  b.innerHTML = renderText(text);
+  row.appendChild(b);
+  chat.appendChild(row);
+  chat.scrollTop = chat.scrollHeight;
+  return row;
+}
+
+function typingRow() {
+  const row = document.createElement("div");
+  row.className = "row ai";
+  const av = document.createElement("div");
+  av.className = "avatar";
+  av.textContent = "✦";
+  row.appendChild(av);
+  const b = document.createElement("div");
+  b.className = "bubble";
+  b.innerHTML = '<span class="typing-dots"><span></span><span></span><span></span></span>';
+  row.appendChild(b);
+  chat.appendChild(row);
+  chat.scrollTop = chat.scrollHeight;
+  return row;
+}
+
+function addFeedback(row, messageId) {
+  const fb = document.createElement("div");
+  fb.className = "feedback";
+  const up = document.createElement("button");
+  up.className = "fb-btn";
+  up.textContent = "👍 Foydali";
+  const down = document.createElement("button");
+  down.className = "fb-btn";
+  down.textContent = "👎";
+  fb.append(up, down);
+  row.appendChild(fb);
+  up.onclick = () => {
+    api("/api/feedback", { method: "POST", body: JSON.stringify({ message_id: messageId, rating: 1 }) }).catch(() => {});
+    up.classList.add("active"); down.classList.remove("active");
+  };
+  down.onclick = () => {
+    api("/api/feedback", { method: "POST", body: JSON.stringify({ message_id: messageId, rating: -1 }) }).catch(() => {});
+    down.classList.add("active"); up.classList.remove("active");
+  };
+}
+
+function showWelcome() {
+  const name = me ? me.name : "";
+  chat.innerHTML = "";
+  const w = document.createElement("div");
+  w.className = "welcome";
+  w.innerHTML =
+    "<h2>" + (name ? "Assalomu alaykum, <span class='accent'>" + esc(name) + "</span>!" : "Sizning aqlli<br><span class='accent'>yordamchingiz</span>") + "</h2>" +
+    "<p>Men noldan qurilgan sun'iy intellektman. Suhbatlashaman, kod yozaman, rasmni tahlil qilaman, internetdan izlayman va har suhbatda o'rganib boraman.</p>";
+  chat.appendChild(w);
+}
+
+/* ================= yuborish ================= */
+
+async function send(text) {
+  text = (text || "").trim();
+  if (!text || sending) return;
+  input.value = "";
+  autoResize();
+  sending = true;
+  sendBtn.disabled = true;
+  hideChips();
+
+  qMessage("user", text);
+  const typing = typingRow();
+
+  try {
+    const body = { message: text, user_id: CLIENT_ID };
+    if (me) body.token = me.token;
+    if (currentConv !== null) body.conversation_id = currentConv;
+
+    const data = await api("/api/chat", { method: "POST", body: JSON.stringify(body) });
+    typing.remove();
+    const row = qMessage("ai", data.reply);
+    addFeedback(row, data.message_id);
+
+    if (currentConv === null && data.conversation_id) {
+      currentConv = data.conversation_id;
+      refreshConversations();
+    }
+    if (data.user_name && !me) {
+      me = { token: localStorage.getItem("neura_token"), username: "", name: data.user_name };
+    }
+  } catch (e) {
+    typing.remove();
+    if (e.status === 401) {
+      qMessage("ai", "Kirish muddati tugagan. Qaytadan kiring.");
+    } else {
+      qMessage("ai", "⚠️ Xatolik yuz berdi. Iltimos, qayta urinib ko'ring.");
+    }
+  }
+  sending = false;
+  sendBtn.disabled = false;
+  input.focus();
+}
+
+/* ================= rasm tahlili ================= */
+
+function formatAnalysis(d) {
+  const lines = [
+    "📷 <b>Rasm tahlili:</b>",
+    "• Format: " + d.format + ", " + d.width + "×" + d.height,
+    "• Yorug'lik: " + d.brightness,
+    "• Asosiy ranglar: " + d.colors.map((c) => c.name + " (" + c.percent + "%)").join(", "),
+    "• " + d.unique_colors + " xil rang",
+    "• " + (d.photo_like ? "Bu fotografiya" : "Bu kompyuter grafikasi"),
+  ];
+  if (d.exif && d.exif.DateTimeOriginal) lines.push("• Sana: " + d.exif.DateTimeOriginal);
+  return lines.join("\n");
+}
+
+async function sendImage(file) {
+  if (!file || sending) return;
+  sending = true;
+  sendBtn.disabled = true;
+  hideChips();
+
+  const row = document.createElement("div");
+  row.className = "row user";
+  qImage(row, "user", URL.createObjectURL(file), file.name);
+  const typing = typingRow();
+
+  try {
+    const fd = new FormData();
+    fd.append("file", file);
+    const res = await fetch("/api/analyze-image", { method: "POST", body: fd });
+    const data = await res.json();
+    if (!res.ok) throw Object.assign(new Error(data.error || "xato"), { status: res.status });
+    typing.remove();
+    const arow = qMessage("ai", formatAnalysis(data));
+  } catch (e) {
+    typing.remove();
+    qMessage("ai", "⚠️ Rasmni tahlil qilib bo'lmadi: " + (e.message || "xato"));
+  }
+  sending = false;
+  sendBtn.disabled = false;
+  input.focus();
+}
+
+/* ================= suhbatlar (tarix) ================= */
+
+async function refreshConversations() {
+  if (!me) return;
+  try {
+    const data = await api("/api/conversations?token=" + encodeURIComponent(me.token));
+    renderConvList(data.items);
+  } catch (e) { /* indamaslik */ }
+}
+
+function renderConvList(items) {
+  convList.innerHTML = "";
+  convEmpty.style.display = items.length ? "none" : "block";
+  items.forEach((c) => {
+    const btn = document.createElement("button");
+    btn.className = "conv-item" + (currentConv === c.id ? " active" : "");
+    btn.innerHTML =
+      '<span class="conv-ico"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>' +
+      '<span class="conv-info"><span class="conv-title">' + esc(c.title) + "</span>" +
+      '<span class="conv-meta">' + c.msg_count + " xabar · " + fmtDate(c.created_at) + "</span></span>";
+    btn.onclick = () => openConversation(c.id);
+    convList.appendChild(btn);
+  });
+}
+
+async function openConversation(id) {
+  if (!me) return;
+  closeSidebar();
+  try {
+    const data = await api("/api/conversations/" + id + "?token=" + encodeURIComponent(me.token));
+    currentConv = id;
+    chat.innerHTML = "";
+    data.items.forEach((m) => qMessage(m.role === "assistant" ? "ai" : "user", m.text));
+    if (!data.items.length) showWelcome();
+    refreshConversations();
+  } catch (e) {
+    if (e.status === 401) openAuth();
+  }
+}
+
+function newChat() {
+  currentConv = null;
+  showWelcome();
+  refreshConversations();
+  closeSidebar();
+  hideChips();
+  input.focus();
+}
+
+/* ================= hisob ================= */
+
+function openAuth() {
+  authBackdrop.hidden = false;
+  fUsername.focus();
+}
+function closeAuth() { authBackdrop.hidden = true; }
+
+function setMode(mode) {
+  document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.mode === mode));
+  nameField.hidden = mode !== "register";
+  authSubmit.textContent = mode === "register" ? "Ro'yxatdan o'tish" : "Kirish";
+  modalTitle.textContent = mode === "register" ? "Hisob yarating" : "Xush kelibsiz!";
+  modalSub.textContent = mode === "register" ? "Suhbatlaringiz bir joyda saqlansin" : "Hisobingizga kiring";
+}
+
+authForm.onsubmit = async (e) => {
+  e.preventDefault();
+  const mode = document.querySelector(".tab.active").dataset.mode;
+  const username = fUsername.value.trim();
+  const password = fPassword.value;
+  const name = fName.value.trim();
+  authError.textContent = "";
+  authSubmit.disabled = true;
+
+  try {
+    const data = await api("/api/" + (mode === "register" ? "register" : "login"), {
+      method: "POST",
+      body: JSON.stringify({
+        username, password,
+        name: mode === "register" ? name : undefined,
+        client_id: CLIENT_ID,
+      }),
+    });
+    me = { token: data.token, username: data.username, name: data.name };
+    localStorage.setItem("neura_token", data.token);
+    closeAuth();
+    newChat();
+    renderUser();
+  } catch (err) {
+    authError.textContent = err.message;
+  }
+  authSubmit.disabled = false;
+};
+
+function renderUser() {
+  if (!me) {
+    sideUser.innerHTML =
+      '<button class="logout-btn" style="width:100%;padding:11px" id="loginPromptBtn">🔑 Hisobga kirish / Ro\'yxatdan o\'tish</button>';
+    const b = document.getElementById("loginPromptBtn");
+    if (b) b.onclick = openAuth;
+    return;
+  }
+  const initial = (me.name || me.username || "?").charAt(0).toUpperCase();
+  sideUser.innerHTML =
+    '<div class="user-ava">' + esc(initial) + "</div>" +
+    '<div class="user-info"><div class="user-name">' + esc(me.name) + '</div><div class="user-login">@' + esc(me.username) + "</div></div>" +
+    '<button class="logout-btn" id="logoutBtn" title="Chiqish">Chiqish</button>';
+  document.getElementById("logoutBtn").onclick = async () => {
+    await api("/api/logout?token=" + encodeURIComponent(me.token)).catch(() => {});
+    me = null;
+    currentConv = null;
+    localStorage.removeItem("neura_token");
+    chat.innerHTML = "";
+    renderUser();
+    showWelcome();
+    refreshConversations();
+  };
+}
+
+/* ================= boshqa ================= */
+
+function hideChips() { chipsBox.style.display = "none"; }
+function autoResize() {
+  input.style.height = "auto";
+  input.style.height = Math.min(input.scrollHeight, 150) + "px";
+}
+function closeSidebar() {
+  sidebar.classList.remove("open");
+  overlay.classList.remove("show");
+}
+
+sendBtn.onclick = () => send(input.value);
+input.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    send(input.value);
+  }
+});
+input.addEventListener("input", autoResize);
+
+chipsBox.addEventListener("click", (e) => {
+  const chip = e.target.closest(".chip");
+  if (!chip) return;
+  if (chip.dataset.action === "image") fileInput.click();
+  else send(chip.dataset.q);
+});
+
+fileInput.addEventListener("change", () => {
+  const f = fileInput.files[0];
+  if (f) sendImage(f);
+  fileInput.value = "";
+});
+
+newChatBtn.onclick = newChat;
+menuBtn.onclick = () => {
+  sidebar.classList.toggle("open");
+  overlay.classList.toggle("show");
+};
+overlay.onclick = closeSidebar;
+modalClose.onclick = closeAuth;
+authBackdrop.addEventListener("click", (e) => { if (e.target === authBackdrop) closeAuth(); });
+document.querySelectorAll(".tab").forEach((t) => t.addEventListener("click", () => setMode(t.dataset.mode)));
+
+/* ================= boshlash ================= */
+
+async function boot() {
+  const token = localStorage.getItem("neura_token");
+  if (token) {
+    try {
+      const u = await api("/api/me?token=" + encodeURIComponent(token));
+      me = { token, username: u.username, name: u.name };
+      currentConv = null;
+      renderUser();
+      await refreshConversations();
+    } catch (e) {
+      localStorage.removeItem("neura_token");
+      me = null;
+    }
+  }
+  renderUser();
+  if (!me) showWelcome();
+  if (me && !currentConv) showWelcome();
+}
+
+/* ================= PWA ================= */
+
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("/sw.js").catch(() => {});
+}
+
+let deferredPrompt = null;
+const installBtn = document.getElementById("installBtn");
+window.addEventListener("beforeinstallprompt", (e) => {
+  e.preventDefault();
+  deferredPrompt = e;
+  installBtn.hidden = false;
+});
+installBtn.addEventListener("click", async () => {
+  if (!deferredPrompt) return;
+  deferredPrompt.prompt();
+  await deferredPrompt.userChoice;
+  deferredPrompt = null;
+  installBtn.hidden = true;
+});
+window.addEventListener("appinstalled", () => { installBtn.hidden = true; });
+
+boot();

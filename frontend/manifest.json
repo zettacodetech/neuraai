@@ -1,0 +1,16 @@
+{
+  "name": "Neura AI — Sun'iy intellekt",
+  "short_name": "Neura AI",
+  "description": "Noldan qurilgan sun'iy intellekt. Savol bering — javob beradi, internetdan qidiradi va siz bilan o'rganadi.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f1020",
+  "theme_color": "#0f1020",
+  "lang": "uz",
+  "icons": [
+    { "src": "/static/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/static/icons/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

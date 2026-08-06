@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#0f1020" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Neura AI" />
+  <link rel="manifest" href="/static/manifest.json" />
+  <link rel="apple-touch-icon" href="/static/icons/icon-192.png" />
+  <title>Neura AI — Sizning sun'iy intellektingiz</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✦</text></svg>" />
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <div class="bg-orbs" aria-hidden="true">
+    <span class="orb orb-1"></span>
+    <span class="orb orb-2"></span>
+    <span class="orb orb-3"></span>
+  </div>
+
+  <div class="layout">
+    <!-- ============ SIDEBAR ============ -->
+    <aside class="sidebar glass" id="sidebar">
+      <div class="side-brand">
+        <div class="logo-badge">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9 17 7M7 17l-2.1 2.1"></path>
+          </svg>
+        </div>
+        <h2>Neura <span class="accent">AI</span></h2>
+      </div>
+
+      <button class="new-chat" id="newChatBtn">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+        Yangi suhbat
+      </button>
+
+      <div class="conv-head">Suhbatlarim</div>
+      <div class="conv-list" id="convList">
+        <div class="conv-empty" id="convEmpty">Hali suhbatlar yo'q.<br>Birinchi savolingizni yozing!</div>
+      </div>
+
+      <button class="install-btn" id="installBtn" hidden>
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+        Ilovani o'rnatish
+      </button>
+
+      <div class="side-user" id="sideUser"></div>
+    </aside>
+    <div class="overlay" id="overlay"></div>
+
+    <!-- ============ ASOSIY ============ -->
+    <div class="main">
+      <header class="header glass">
+        <button class="hamburger" id="menuBtn" aria-label="Menyu">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+        </button>
+        <div class="brand">
+          <div class="brand-text">
+            <h1>Neura <span class="accent">AI</span></h1>
+            <p>Noldan qurilgan, suhbatlashib o'rganadi</p>
+          </div>
+        </div>
+        <div class="header-actions">
+          <div class="status"><span class="dot"></span> Onlayn</div>
+        </div>
+      </header>
+
+      <main class="chat" id="chat"></main>
+
+      <section class="composer glass">
+        <div class="chips" id="chips">
+          <button class="chip" data-q="Salom! Sen kimsan?">👋 Salom! Sen kimsan?</button>
+          <button class="chip" data-q="Nima ishlar qila olasan?">⚡ Nima qila olasan?</button>
+          <button class="chip" data-q="O'zbekiston aholisi qancha?">🌍 O'zbekiston aholisi?</button>
+          <button class="chip" data-q="Bugun Toshkentda ob-havo qanday?">🌤 Toshkent ob-havosi</button>
+          <button class="chip" data-action="image">📷 Rasmni tahlil qil</button>
+        </div>
+        <div class="input-row">
+          <textarea id="input" rows="1" placeholder="Neura AI ga savol yuboring..." autofocus></textarea>
+          <label id="imgBtn" class="mic-btn" title="Rasm tahlili" for="fileInput">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"></rect><circle cx="9" cy="9" r="2"></circle><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"></path></svg>
+            <input type="file" id="fileInput" accept="image/*" hidden>
+          </label>
+          <button id="micBtn" class="mic-btn" title="Ovoz (tez orada)" disabled>
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"></rect><path d="M5 10a7 7 0 0 0 14 0M12 17v4M8 21h8"></path></svg>
+          </button>
+          <button id="sendBtn" class="send-btn" title="Yuborish">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M3.4 20.4 20.8 12 3.4 3.6 3 10.2l12 1.8-12 1.8z"/></svg>
+          </button>
+        </div>
+        <p class="disclaimer">Neura AI xato qilishi mumkin. Muhim ma'lumotni tekshirib oling.</p>
+      </section>
+    </div>
+  </div>
+
+  <!-- ============ AUTH MODAL ============ -->
+  <div class="modal-backdrop" id="authBackdrop" hidden>
+    <div class="modal glass">
+      <button class="modal-close" id="modalClose" aria-label="Yopish">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+      <div class="modal-logo">✦</div>
+      <h2 id="modalTitle">Neura AI ga xush kelibsiz!</h2>
+      <p class="modal-sub" id="modalSub">Suhbatlaringiz saqlansin — hisob yarating</p>
+
+      <div class="tabs">
+        <button class="tab active" data-mode="login">Kirish</button>
+        <button class="tab" data-mode="register">Ro'yxatdan o'tish</button>
+      </div>
+
+      <form id="authForm" autocomplete="off">
+        <div class="field" id="nameField" hidden>
+          <label for="fName">Ismingiz</label>
+          <input id="fName" type="text" placeholder="Misol: Alisher" />
+        </div>
+        <div class="field">
+          <label for="fUsername">Login</label>
+          <input id="fUsername" type="text" placeholder="login" autocomplete="username" />
+        </div>
+        <div class="field">
+          <label for="fPassword">Parol</label>
+          <input id="fPassword" type="password" placeholder="••••••" autocomplete="current-password" />
+        </div>
+        <p class="form-error" id="authError"></p>
+        <button type="submit" class="auth-submit" id="authSubmit">Kirish</button>
+      </form>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
