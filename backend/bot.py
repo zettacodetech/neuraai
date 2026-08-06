@@ -225,7 +225,7 @@ def start_bot_in_thread() -> None:
         asyncio.set_event_loop(loop)
         try:
             logging.info("Neura AI bot ishga tushdi (thread)")
-            _build_app().run_polling()
+            _build_app().run_polling(stop_signals=None)
         except Exception as exc:
             logging.error("Bot to'xtadi: %s", exc)
         finally:
