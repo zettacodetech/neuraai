@@ -60,6 +60,13 @@ CREATE TABLE IF NOT EXISTS unanswered (
     status     TEXT DEFAULT 'new',
     created_at TEXT DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS api_keys (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    INTEGER NOT NULL UNIQUE,
+    key        TEXT NOT NULL UNIQUE,
+    created_at TEXT DEFAULT (datetime('now'))
+);
 """
 
 _PG_DDL = [
@@ -112,6 +119,14 @@ _PG_DDL = [
         user_id    BIGINT,
         answer     TEXT,
         status     TEXT DEFAULT 'new',
+        created_at TIMESTAMPTZ DEFAULT now()
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS api_keys (
+        id         BIGSERIAL PRIMARY KEY,
+        user_id    BIGINT NOT NULL UNIQUE,
+        key        TEXT NOT NULL UNIQUE,
         created_at TIMESTAMPTZ DEFAULT now()
     )
     """,
@@ -281,6 +296,34 @@ class Database:
     def set_token(self, user_id: int, token: str) -> None:
         with self._lock:
             self._execute("UPDATE users SET token = ? WHERE id = ?", (token, user_id))
+
+    # ================= api keys (bepul, limitle) =================
+    def set_api_key(self, user_id: int, key: str) -> None:
+        with self._lock:
+            self._execute(
+                "INSERT INTO api_keys (user_id, key) VALUES (?, ?) "
+                "ON CONFLICT(user_id) DO UPDATE SET key = excluded.key",
+                (user_id, key),
+            )
+
+    def get_api_key(self, user_id: int) -> dict | None:
+        row = self._row(
+            "SELECT id, user_id, key, created_at FROM api_keys WHERE user_id = ?",
+            (user_id,),
+        )
+        return dict(row) if row else None
+
+    def delete_api_key(self, user_id: int) -> None:
+        with self._lock:
+            self._execute("DELETE FROM api_keys WHERE user_id = ?", (user_id,))
+
+    def get_user_by_api_key(self, key: str) -> dict | None:
+        row = self._row(
+            "SELECT u.id, u.username, u.name, u.client_id, u.token "
+            "FROM api_keys k JOIN users u ON u.id = k.user_id WHERE k.key = ?",
+            (key,),
+        )
+        return dict(row) if row else None
 
     def update_name(self, user_id: int, name: str) -> None:
         with self._lock:

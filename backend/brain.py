@@ -230,7 +230,12 @@ class Brain:
         return score * (1.0 + coverage)
 
     # ---------- javob ----------
-    def answer(self, message: str, knowledge: list[dict]) -> tuple[str, str]:
+    def answer(
+        self,
+        message: str,
+        knowledge: list[dict],
+        history: list[dict] | None = None,
+    ) -> tuple[str, str]:
         """(javob, source) — source: intent | code | knowledge | websearch | llm | fallback"""
         intent = self._detect_intent(message)
         if intent:
@@ -264,17 +269,17 @@ class Brain:
         if best and best[1] >= 2.0 and best[2] >= 0.4:
             return best[0]["answer"], "knowledge"
 
-        # Kuchaytirilgan yo'l: internet (Serper/DDG) + LLM (Groq/Z.AI)
+        # Kuchaytirilgan yo'l: internet (Serper/DDG) + LLM (OpenRouter/KIE/Groq)
         if os.environ.get("ENABLE_WEB_SEARCH", "1") == "1" and len(message) >= 10:
             web_answer, context = self._web_search(message)
             if context:
-                llm_reply = self._llm(message, context=context)
+                llm_reply = self._llm(message, context=context, history=history)
                 if llm_reply:
                     return llm_reply, "llm"
             if web_answer:
                 return web_answer, "websearch"
 
-        llm_reply = self._llm(message)
+        llm_reply = self._llm(message, history=history)
         if llm_reply:
             return llm_reply, "llm"
         return self._fallback(message), "fallback"
@@ -300,12 +305,16 @@ class Brain:
         return answer or "", answer or ""
 
     @staticmethod
-    def _llm(message: str, context: str | None = None) -> str | None:
+    def _llm(
+        message: str,
+        context: str | None = None,
+        history: list[dict] | None = None,
+    ) -> str | None:
         try:
             from llm import llm_answer
         except ImportError:
             return None
-        return llm_answer(message, context=context)
+        return llm_answer(message, history=history, context=context)
 
     def _retrieve(
         self, q_tokens: list[str], knowledge: list[dict]

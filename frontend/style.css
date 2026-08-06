@@ -659,3 +659,85 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
     scroll-behavior: auto !important;
   }
 }
+/* ================= V1.3: APK / Haqida / Qoidalar / API kaliti ================= */
+
+.head-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 9px 13px;
+  border-radius: 12px;
+  background: var(--card-solid);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 13px; font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  transition: border-color 0.2s, transform 0.15s;
+}
+.head-btn:hover { border-color: var(--accent-2); transform: translateY(-1px); }
+.accent-btn {
+  background: linear-gradient(135deg, var(--accent-1), var(--accent-3));
+  border: none; color: #fff;
+}
+.accent-btn:hover { filter: brightness(1.1); }
+
+.modal-lg { max-width: 560px; max-height: 88vh; overflow-y: auto; }
+
+.terms-list { display: flex; flex-direction: column; gap: 12px; margin: 6px 0 22px; }
+.term-item { display: flex; gap: 12px; align-items: flex-start; }
+.term-num {
+  flex: none; width: 26px; height: 26px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent-1), var(--accent-3));
+  color: #fff; font-size: 13px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  margin-top: 1px;
+}
+.term-item p { margin: 0; font-size: 13.5px; line-height: 1.55; color: var(--text); }
+.term-item b { color: var(--text); }
+
+.about-body { text-align: left; font-size: 14px; line-height: 1.6; color: var(--text); margin-top: 4px; }
+.feat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 18px 0; }
+.feat {
+  background: var(--card-solid);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 13px 14px;
+  display: flex; flex-direction: column; gap: 3px;
+}
+.feat b { font-size: 13.5px; }
+.feat span { font-size: 12px; color: var(--muted); }
+
+.api-key-box {
+  background: var(--card-solid);
+  border: 1px dashed var(--accent-2);
+  border-radius: 14px;
+  padding: 14px;
+  text-align: center;
+  margin-bottom: 14px;
+  overflow-wrap: anywhere;
+}
+.key-val { font-family: ui-monospace, monospace; font-size: 13px; color: var(--accent-2); }
+.key-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-bottom: 16px; }
+.ghost-btn {
+  padding: 11px 18px;
+  border-radius: 14px;
+  background: var(--card-solid);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 14px; font-weight: 600;
+  cursor: pointer;
+}
+.ghost-btn.danger { border-color: #e5484d; color: #ff8085; }
+.ghost-btn:hover { border-color: var(--accent-2); }
+.api-howto { text-align: left; font-size: 12.5px; color: var(--muted); line-height: 1.6; }
+.api-howto pre {
+  background: var(--card-solid);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+  font-size: 11.5px;
+  overflow-x: auto;
+  color: var(--text);
+  margin-top: 8px;
+}
+.muted { color: var(--muted); font-size: 13.5px; }

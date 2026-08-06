@@ -37,6 +37,24 @@ ADMIN_KEY = os.environ.get("ADMIN_KEY", "admin123")
 ROOT = os.path.join(os.path.dirname(__file__), "..")
 FRONTEND = os.path.join(ROOT, "frontend")
 
+# ================= API kalitlari rate-limit (bepul, amortizatsiya) =================
+_API_RATE_LIMIT = int(os.environ.get("API_KEY_LIMIT_PER_MINUTE", "20"))
+_api_hits: dict[str, list[float]] = {}
+_api_lock = threading.Lock()
+
+
+def _api_key_allowed(key: str) -> bool:
+    import time as _time
+
+    now = _time.time()
+    with _api_lock:
+        window = [t for t in _api_hits.get(key, []) if now - t < 60]
+        if len(window) >= _API_RATE_LIMIT:
+            return False
+        window.append(now)
+        _api_hits[key] = window[-_API_RATE_LIMIT:]
+        return True
+
 
 class ChatRequest(BaseModel):
     message: str
@@ -44,6 +62,7 @@ class ChatRequest(BaseModel):
     telegram_id: int | None = None
     token: str | None = None
     conversation_id: int | None = None
+    api_key: str | None = None
 
 
 class FeedbackRequest(BaseModel):
@@ -108,6 +127,20 @@ def index() -> FileResponse:
     return FileResponse(os.path.join(FRONTEND, "index.html"))
 
 
+@app.get("/apk/neuraai.apk")
+def apk_download() -> FileResponse:
+    """Android APK — yuklab olish (fayl frontend/apk/ dan xizmat qilinadi)."""
+    apk = os.path.join(FRONTEND, "apk", "neuraai.apk")
+    if not os.path.exists(apk):
+        return JSONResponse({"error": "APK hozircha tayyor emas"}, status_code=404)
+    return FileResponse(apk, media_type="application/vnd.android.package-archive")
+
+
+@app.get("/static-apk/neuraai.apk")
+def apk_download_static() -> FileResponse:
+    return apk_download()
+
+
 @app.get("/sw.js")
 def sw() -> FileResponse:
     return FileResponse(os.path.join(FRONTEND, "sw.js"), media_type="text/javascript")
@@ -161,6 +194,18 @@ def chat(req: ChatRequest) -> JSONResponse:
     db = get_db()
 
     user = db.get_user_by_token(req.token) if req.token else None
+    if not user and req.api_key:
+        key_user = db.get_user_by_api_key(req.api_key)
+        if not key_user:
+            return JSONResponse({"error": "api kaliti noto'g'ri"}, status_code=401)
+        if not _api_key_allowed(req.api_key):
+            return JSONResponse(
+                {
+                    "error": "So'rovlar limiti (20/daqiqa) tugadi. Keyinroq urinib ko'ring."
+                },
+                status_code=429,
+            )
+        user = key_user
     if user:
         user_id = user["id"]
     else:
@@ -177,7 +222,22 @@ def chat(req: ChatRequest) -> JSONResponse:
         conv_id = db.create_conversation(user_id, req.message)
 
     db.add_message(user_id, "user", req.message, conversation_id=conv_id)
-    reply, source = brain.answer(req.message, db.get_knowledge())
+
+    history: list[dict] | None = None
+    try:
+        prev = db.conversation_messages(conv_id, user_id)
+        if len(prev) > 1:
+            history = [
+                {
+                    "role": "assistant" if m["role"] == "assistant" else "user",
+                    "content": m["text"],
+                }
+                for m in prev[:-1]
+            ][-8:]
+    except Exception:
+        history = None
+
+    reply, source = brain.answer(req.message, db.get_knowledge(), history=history)
     reply = (
         reply
         or "Kechirasiz, javob tayyorlay olmadim. Savolingizni boshqacha yozib ko'ring."
@@ -346,6 +406,57 @@ def rename(req: RenameRequest) -> JSONResponse:
     if not user:
         return JSONResponse({"error": "kirish talab qilinadi"}, status_code=401)
     db.update_name(user["id"], req.name.strip()[:40] or user["username"])
+    return JSONResponse({"ok": True})
+
+
+@app.get("/api/session")
+def session(client_id: str = "") -> JSONResponse:
+    """Mehmon seansi: brauzer/ilova uchun doimiy token (tarix saqlanadi)."""
+    if not client_id:
+        client_id = "anon_" + new_token()[:12]
+    db = get_db()
+    user_id = db.get_or_create_user(client_id=client_id[:60])
+    user = db.get_user(user_id)
+    if user and user.get("token"):
+        return JSONResponse({"token": user["token"], "guest": not user.get("username")})
+    token = new_token()
+    db.set_token(user_id, token)
+    return JSONResponse({"token": token, "guest": True})
+
+
+# ================= API kalitlari (bepul, limitle) =================
+
+
+@app.post("/api/key/create")
+def api_key_create(token: str = "") -> JSONResponse:
+    db = get_db()
+    user = db.get_user_by_token(token)
+    if not user:
+        return JSONResponse({"error": "kirish talab qilinadi"}, status_code=401)
+    key = new_token()
+    db.set_api_key(user["id"], key)
+    return JSONResponse({"key": key, "limit_per_minute": _API_RATE_LIMIT})
+
+
+@app.get("/api/key")
+def api_key_get(token: str = "") -> JSONResponse:
+    db = get_db()
+    user = db.get_user_by_token(token)
+    if not user:
+        return JSONResponse({"error": "kirish talab qilinadi"}, status_code=401)
+    row = db.get_api_key(user["id"])
+    if not row:
+        return JSONResponse({"key": None})
+    return JSONResponse({"key": row["key"], "limit_per_minute": _API_RATE_LIMIT})
+
+
+@app.delete("/api/key")
+def api_key_delete(token: str = "") -> JSONResponse:
+    db = get_db()
+    user = db.get_user_by_token(token)
+    if not user:
+        return JSONResponse({"error": "kirish talab qilinadi"}, status_code=401)
+    db.delete_api_key(user["id"])
     return JSONResponse({"ok": True})
 
 

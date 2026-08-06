@@ -24,6 +24,21 @@ const fName = document.getElementById("fName");
 const fUsername = document.getElementById("fUsername");
 const fPassword = document.getElementById("fPassword");
 
+const termsBackdrop = document.getElementById("termsBackdrop");
+const termsAccept = document.getElementById("termsAccept");
+const aboutBackdrop = document.getElementById("aboutBackdrop");
+const aboutClose = document.getElementById("aboutClose");
+const aboutBtn = document.getElementById("aboutBtn");
+const keyBackdrop = document.getElementById("keyBackdrop");
+const keyClose = document.getElementById("keyClose");
+const keyBtn = document.getElementById("apiKeyBtn");
+const keyCreateBtn = document.getElementById("keyCreateBtn");
+const keyCopyBtn = document.getElementById("keyCopyBtn");
+const keyRevokeBtn = document.getElementById("keyRevokeBtn");
+const keyError = document.getElementById("keyError");
+const apiKeyBox = document.getElementById("apiKeyBox");
+const loginTopBtn = document.getElementById("loginTopBtn");
+
 /* ================= holat ================= */
 
 let me = null;            // {token, username, name} | null
@@ -437,17 +452,19 @@ authForm.onsubmit = async (e) => {
 
 function renderUser() {
   if (!me) {
+    if (loginTopBtn) loginTopBtn.style.display = "";
     sideUser.innerHTML =
       '<button class="logout-btn" style="width:100%;padding:11px" id="loginPromptBtn">🔑 Hisobga kirish / Ro\'yxatdan o\'tish</button>';
     const b = document.getElementById("loginPromptBtn");
     if (b) b.onclick = openAuth;
     return;
   }
+  if (loginTopBtn) loginTopBtn.style.display = "none";
   const initial = (me.name || me.username || "?").charAt(0).toUpperCase();
   sideUser.innerHTML =
     '<div class="user-ava">' + esc(initial) + "</div>" +
-    '<div class="user-info"><div class="user-name">' + esc(me.name) + '</div><div class="user-login">@' + esc(me.username) + "</div></div>" +
-    '<button class="logout-btn" id="logoutBtn" title="Chiqish">Chiqish</button>';
+    '<div class="user-info"><div class="user-name">' + esc(me.name || me.username || "Mehmon") + '</div><div class="user-login">' + (me.guest ? "mehmon" : "@" + esc(me.username)) + "</div></div>" +
+    '<button class="logout-btn" id="logoutBtn" title="Chiqish">' + (me.guest ? "Chiqish" : "Chiqish") + "</button>";
   document.getElementById("logoutBtn").onclick = async () => {
     await api("/api/logout?token=" + encodeURIComponent(me.token)).catch(() => {});
     me = null;
@@ -457,8 +474,72 @@ function renderUser() {
     renderUser();
     showWelcome();
     refreshConversations();
+    if (loginTopBtn) loginTopBtn.style.display = "";
   };
 }
+
+/* ================= API kaliti / Haqida / Qoidalar ================= */
+
+function openAbout() {
+  if (aboutBtn) aboutBackdrop.hidden = false;
+}
+
+async function openKeyModal() {
+  if (!me) {
+    authError.textContent = "";
+    openAuth();
+    return;
+  }
+  keyBackdrop.hidden = false;
+  keyError.textContent = "";
+  try {
+    const data = await api("/api/key?token=" + encodeURIComponent(me.token));
+    keyCreateBtn.hidden = !!data.key;
+    keyCopyBtn.hidden = !data.key;
+    keyRevokeBtn.hidden = !data.key;
+    apiKeyBox.innerHTML = data.key
+      ? '<code id="apiKeyVal">' + esc(data.key) + "</code>"
+      : '<span class="muted">Sizda hozircha kalit yo\'q. Yaratib oling.</span>';
+  } catch (e) {
+    keyError.textContent = e.message;
+  }
+}
+
+keyCreateBtn.onclick = async () => {
+  keyCreateBtn.disabled = true;
+  keyError.textContent = "";
+  try {
+    const data = await api("/api/key/create", {
+      method: "POST",
+      body: JSON.stringify({ token: me.token }),
+    });
+    apiKeyBox.innerHTML = '<span id="apiKeyVal" class="key-val">' + esc(data.key) + "</span>";
+    keyCreateBtn.hidden = true;
+    keyCopyBtn.hidden = false;
+    keyRevokeBtn.hidden = false;
+    navigator.clipboard && navigator.clipboard.writeText(data.key).catch(() => {});
+  } catch (e) {
+    keyError.textContent = e.message;
+  }
+  keyCreateBtn.disabled = false;
+};
+
+keyCopyBtn.onclick = () => {
+  const val = document.getElementById("apiKeyVal");
+  if (val && navigator.clipboard) navigator.clipboard.writeText(val.textContent);
+};
+
+keyRevokeBtn.onclick = async () => {
+  try {
+    await api("/api/key?token=" + encodeURIComponent(me.token), { method: "DELETE" });
+    apiKeyBox.innerHTML = '<span class="muted">Kalit bekor qilindi.</span>';
+    keyCreateBtn.hidden = false;
+    keyCopyBtn.hidden = true;
+    keyRevokeBtn.hidden = true;
+  } catch (e) {
+    keyError.textContent = e.message;
+  }
+};
 
 /* ================= boshqa ================= */
 
@@ -505,9 +586,26 @@ modalClose.onclick = closeAuth;
 authBackdrop.addEventListener("click", (e) => { if (e.target === authBackdrop) closeAuth(); });
 document.querySelectorAll(".tab").forEach((t) => t.addEventListener("click", () => setMode(t.dataset.mode)));
 
+loginTopBtn.onclick = openAuth;
+aboutBtn.onclick = openAbout;
+aboutClose.onclick = () => { aboutBackdrop.hidden = true; };
+aboutBackdrop.addEventListener("click", (e) => { if (e.target === aboutBackdrop) aboutBackdrop.hidden = true; });
+keyBtn.onclick = openKeyModal;
+keyClose.onclick = () => { keyBackdrop.hidden = true; };
+keyBackdrop.addEventListener("click", (e) => { if (e.target === keyBackdrop) keyBackdrop.hidden = true; });
+termsBackdrop.addEventListener("click", (e) => { if (e.target === termsBackdrop) termsBackdrop.hidden = true; });
+
 /* ================= boshlash ================= */
 
 async function boot() {
+  if (!localStorage.getItem("neura_terms")) {
+    termsBackdrop.hidden = false;
+  }
+  termsAccept.onclick = () => {
+    localStorage.setItem("neura_terms", "1");
+    termsBackdrop.hidden = true;
+  };
+
   const token = localStorage.getItem("neura_token");
   if (token) {
     try {
@@ -521,9 +619,20 @@ async function boot() {
       me = null;
     }
   }
-  renderUser();
-  if (!me) showWelcome();
-  if (me && !currentConv) showWelcome();
+  if (!me) {
+    try {
+      const s = await api("/api/session?client_id=" + encodeURIComponent(CLIENT_ID));
+      me = { token: s.token, username: "", name: "", guest: true };
+      localStorage.setItem("neura_token", s.token);
+      renderUser();
+      await refreshConversations();
+    } catch (e) {
+      renderUser();
+    }
+  } else {
+    renderUser();
+  }
+  if (!currentConv) showWelcome();
 }
 
 /* ================= PWA ================= */

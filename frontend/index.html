@@ -10,7 +10,7 @@
   <meta name="apple-mobile-web-app-title" content="Neura AI" />
   <link rel="manifest" href="/static/manifest.json" />
   <link rel="apple-touch-icon" href="/static/icons/icon-192.png" />
-  <title>Neura AI — Sizning sun'iy intellektingiz</title>
+  <title>NeuraAI — Sizning sun'iy intellektingiz</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✦</text></svg>" />
   <link rel="stylesheet" href="/static/style.css" />
 </head>
@@ -31,7 +31,7 @@
             <path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9 17 7M7 17l-2.1 2.1"></path>
           </svg>
         </div>
-        <h2>Neura <span class="accent">AI</span></h2>
+        <h2>Neura<span class="accent">AI</span></h2>
       </div>
 
       <button class="new-chat" id="newChatBtn">
@@ -44,10 +44,10 @@
         <div class="conv-empty" id="convEmpty">Hali suhbatlar yo'q.<br>Birinchi savolingizni yozing!</div>
       </div>
 
-      <button class="install-btn" id="installBtn" hidden>
+      <a class="install-btn" href="/static-apk/neuraai.apk" download id="apkSideLink">
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
-        Ilovani o'rnatish
-      </button>
+        Android ilovani yuklab olish
+      </a>
 
       <div class="side-user" id="sideUser"></div>
     </aside>
@@ -61,12 +61,23 @@
         </button>
         <div class="brand">
           <div class="brand-text">
-            <h1>Neura <span class="accent">AI</span></h1>
+            <h1>Neura<span class="accent">AI</span></h1>
             <p>Noldan qurilgan, suhbatlashib o'rganadi</p>
           </div>
         </div>
         <div class="header-actions">
           <div class="status"><span class="dot"></span> Onlayn</div>
+          <a class="head-btn" href="/apk/neuraai.apk" download id="apkBtn" title="Android APK">
+            <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+            <span>APK</span>
+          </a>
+          <button class="head-btn" id="apiKeyBtn" title="API kaliti">
+            <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 2l-2 2m-7.6 7.6a5.5 5.5 0 1 1-7.78 7.78 5.5 5.5 0 0 1 7.78-7.78zm0 0L15.5 7.5m0 0 3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+          </button>
+          <button class="head-btn" id="aboutBtn" title="NeuraAI haqida">
+            <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg>
+          </button>
+          <button class="head-btn accent-btn" id="loginTopBtn">Kirish</button>
         </div>
       </header>
 
@@ -74,28 +85,22 @@
 
       <section class="composer glass">
         <div class="chips" id="chips">
-          <button class="chip" data-q="Salom! Sen kimsan?">👋 Salom! Sen kimsan?</button>
           <button class="chip" data-q="Nima ishlar qila olasan?">⚡ Nima qila olasan?</button>
-          <button class="chip" data-q="O'zbekiston aholisi qancha?">🌍 O'zbekiston aholisi?</button>
-          <button class="chip" data-q="Bugun Toshkentda ob-havo qanday?">🌤 Toshkent ob-havosi</button>
+          <button class="chip" data-q="O'zbekiston haqida gapirib ber">🌍 O'zbekiston haqida</button>
           <button class="chip" data-action="image">📷 Rasmni tahlil qil</button>
           <button class="chip" data-gen="image">🎨 Rasm yarat</button>
           <button class="chip" data-gen="video">🎬 Video yarat</button>
         </div>
         <div class="input-row">
-          <textarea id="input" rows="1" placeholder="Neura AI ga savol yuboring..." autofocus></textarea>
+          <textarea id="input" rows="1" placeholder="NeuraAI ga savol yuboring..." autofocus></textarea>
           <label id="imgBtn" class="mic-btn" title="Rasm tahlili" for="fileInput">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"></rect><circle cx="9" cy="9" r="2"></circle><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"></path></svg>
             <input type="file" id="fileInput" accept="image/*" hidden>
           </label>
-          <button id="micBtn" class="mic-btn" title="Ovoz (tez orada)" disabled>
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"></rect><path d="M5 10a7 7 0 0 0 14 0M12 17v4M8 21h8"></path></svg>
-          </button>
           <button id="sendBtn" class="send-btn" title="Yuborish">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M3.4 20.4 20.8 12 3.4 3.6 3 10.2l12 1.8-12 1.8z"/></svg>
           </button>
         </div>
-        <p class="disclaimer">Neura AI xato qilishi mumkin. Muhim ma'lumotni tekshirib oling.</p>
       </section>
     </div>
   </div>
@@ -107,7 +112,7 @@
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
       </button>
       <div class="modal-logo">✦</div>
-      <h2 id="modalTitle">Neura AI ga xush kelibsiz!</h2>
+      <h2 id="modalTitle">NeuraAI ga xush kelibsiz!</h2>
       <p class="modal-sub" id="modalSub">Suhbatlaringiz saqlansin — hisob yarating</p>
 
       <div class="tabs">
@@ -131,6 +136,74 @@
         <p class="form-error" id="authError"></p>
         <button type="submit" class="auth-submit" id="authSubmit">Kirish</button>
       </form>
+    </div>
+  </div>
+
+  <!-- ============ QOIDALAR (onboarding) ============ -->
+  <div class="modal-backdrop" id="termsBackdrop" hidden>
+    <div class="modal modal-lg glass">
+      <div class="modal-logo">✦</div>
+      <h2>Neura<span class="accent">AI</span> ga xush kelibsiz!</h2>
+      <p class="modal-sub">Suhbatlashishdan oldin quyidagi qoidalar bilan tanishib chiqing</p>
+      <div class="terms-list">
+        <div class="term-item"><span class="term-num">1</span><p><b>Maqsad.</b> NeuraAI — o'zbek tilidagi sun'iy intellekt yordamchisi. Suhbatlashadi, rasm tahlil qiladi va rasm/video yaratadi.</p></div>
+        <div class="term-item"><span class="term-num">2</span><p><b>Xatoliklar.</b> AI javoblari hozircha har doim to'g'ri bo'lmasligi mumkin. Muhim ma'lumotni (tibbiyot, moliya, dori, qonun) doim tekshirib oling.</p></div>
+        <div class="term-item"><span class="term-num">3</span><p><b>Boshqa foydalanish.</b> NeuraAI dan noqonuniy, zararli yoki boshqa odamlarga zarar yetkazadigan so'rovlar uchun foydalanmang.</p></div>
+        <div class="term-item"><span class="term-num">4</span><p><b>Ma'lumotlar.</b> Suhbatlar ta'lim maqsadida AI'ni takomillashtirish uchun ishlatilishi mumkin. Nozik shaxsiy ma'lumotlarni yozmang.</p></div>
+        <div class="term-item"><span class="term-num">5</span><p><b>API kaliti.</b> Dasturlash uchun API kaliti <b>bepul</b> — faqat daqiqasiga 20 so'rovgacha limitu cheklangan.</p></div>
+        <div class="term-item"><span class="term-num">6</span><p><b>Android ilova.</b> Rasmiy APK'ni yuqoridagi "APK" tugmasi orqali yuklab oling. Boshqa manbalardan ilovalardan ehtiyot bo'ling.</p></div>
+      </div>
+      <button class="auth-submit" id="termsAccept">Tushundim, suhbatlashishni boshlash</button>
+    </div>
+  </div>
+
+  <!-- ============ HAQIDA MODAL ============ -->
+  <div class="modal-backdrop" id="aboutBackdrop" hidden>
+    <div class="modal modal-lg glass">
+      <button class="modal-close" id="aboutClose" aria-label="Yopish">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+      <div class="modal-logo">✦</div>
+      <h2>Neura<span class="accent">AI</span> haqida</h2>
+      <div class="about-body">
+        <p><b>NeuraAI</b> — noldan qurilgan, o'zbek tilida sichraydigan sun'iy intellekt yordamchisi. Har suhbatda odamalr ganovrig urnagan ma'lumotlarini o'rganib boradi.</p>
+        <div class="feat-grid">
+          <div class="feat"><b>💬 Suhbat</b><span>Savollarga tabiiy javob beradi</span></div>
+          <div class="feat"><b>💻 Kod</b><span>Dasturlash kodlari yozadi</span></div>
+          <div class="feat"><b>🌍 Qidiruv</b><span>Internetdan yangi ma'lumot topadi</span></div>
+          <div class="feat"><b>📷 Rasm tahlili</b><span>Rasmni tahlil qiladı</span></div>
+          <div class="feat"><b>🎨 Rasm/Video</b><span>Kir yozganingizga qarab yaratadi</span></div>
+          <div class="feat"><b>🔑 API</b><span>Bepul API kalit — dasturlaringizga qo'shvering</span></div>
+        </div>
+        <p class="modal-sub">Savollaringiz bormi? Shunchaki chatga yozing — NeuraAI'ga hamma narsani soalishingiz mumkin!</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ API KALITI MODAL ============ -->
+  <div class="modal-backdrop" id="keyBackdrop" hidden>
+    <div class="modal glass">
+      <button class="modal-close" id="keyClose" aria-label="Yopish">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+      <div class="modal-logo">🔑</div>
+      <h2>API kaliti</h2>
+      <p class="modal-sub">Kalit <b>mutlaqo bepul</b>. Server yuklanishi oldini olish uchun limit: <b>20 so'rov / daqiqa</b>.</p>
+      <div class="api-key-box" id="apiKeyBox">
+        <span class="muted">Sizda hozircha kalit yo'q. Yaratib oling.</span>
+      </div>
+      <p class="form-error" id="keyError"></p>
+      <div class="key-actions">
+        <button class="auth-submit" id="keyCreateBtn">Kalit yaratish</button>
+        <button class="ghost-btn" id="keyCopyBtn" hidden>Nusxalash</button>
+        <button class="ghost-btn danger" id="keyRevokeBtn" hidden>Bekor qilish</button>
+      </div>
+      <div class="api-howto">
+        <b>Dastulangizda foydalanish:</b>
+        <pre>curl -X POST https://neuraai.up.railway.app/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message":"Salom","api_key":"YOUR_KEY"}'</pre>
+      </div>
     </div>
   </div>
 
