@@ -533,3 +533,129 @@ body {
   .welcome h2 { font-size: 24px; }
   .brand-text p { display: none; }
 }
+
+/* =====================================================================
+   V1.1 DIZAYN TAKOMILLASHTIRISHI: gradient chiroyli tekis, mikro-interaktsiya,
+   tiltlar uchun xavfsiz maydon (safe-area) va `prefers-reduced-motion`.
+   Pastdagi qoidalar yuqoridagilarni o'zgartiradi/o'stiradi — buzmaydi.
+===================================================================== */
+
+:root {
+  --accent-3: #22d3ee;
+  --glass: rgba(255, 255, 255, 0.06);
+  --ring: linear-gradient(135deg, rgba(124, 108, 255, 0.55), rgba(34, 211, 238, 0.35));
+}
+
+/* --- fon: yumshoq dagi gradient panjara --- */
+body {
+  background:
+    radial-gradient(1000px 620px at 85% -10%, rgba(79, 172, 254, 0.14), transparent 60%),
+    radial-gradient(900px 560px at -10% 110%, rgba(124, 108, 255, 0.16), transparent 60%),
+    #0f1020;
+}
+
+.bg-orbs { filter: saturate(1.1); }
+
+/* --- animatsiya qiluvchi accent matn --- */
+.accent {
+  background: linear-gradient(90deg, var(--accent), var(--accent-2), var(--accent-3), var(--accent));
+  background-size: 300% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: accentFlow 8s linear infinite;
+}
+@keyframes accentFlow { to { background-position: 300% 0; } }
+
+/* --- xush kelibsiz sahifasi --- */
+.welcome-logo {
+  width: 72px; height: 72px;
+  margin: 0 auto 20px;
+  border-radius: 22px;
+  background: var(--user-grad);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 34px;
+  color: #fff;
+  box-shadow:
+    0 0 0 6px rgba(124, 108, 255, 0.12),
+    0 18px 44px rgba(124, 108, 255, 0.5);
+  animation: glow 3.5s ease-in-out infinite, fadeUp 0.5s ease;
+}
+.welcome-chips {
+  display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 20px;
+}
+.welcome-chips .chip { padding: 8px 14px; }
+
+/* --- AI pufak: yumshoq gradient halqa --- */
+.row.ai .bubble {
+  position: relative;
+  background:
+    linear-gradient(#1a1c30, #1a1c30) padding-box,
+    var(--ring) border-box;
+  border: 1px solid transparent;
+}
+.row.ai .bubble::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+/* --- pufaklar ketma-ket kirish effekti --- */
+.row { animation: msgIn 0.32s cubic-bezier(0.22, 0.9, 0.36, 1) both; }
+@keyframes msgIn {
+  from { opacity: 0; transform: translateY(10px) scale(0.985); }
+  to { opacity: 1; transform: none; }
+}
+
+/* --- yuzaki-ish (typing) --- */
+.typing-dots span { background: linear-gradient(135deg, var(--accent), var(--accent-3)); }
+
+/* --- tugmalar zamin effekt --- */
+.send-btn, .auth-submit, .new-chat {
+  position: relative;
+  overflow: hidden;
+}
+.send-btn::before, .auth-submit::before, .new-chat::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(110deg, transparent 30%, rgba(255, 255, 255, 0.28) 50%, transparent 70%);
+  background-size: 250% 100%;
+  animation: sheen 5s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes sheen { 0%, 60% { background-position: 130% 0; } 100% { background-position: -130% 0; } }
+
+/* --- status pill pulsatsiyasi --- */
+.dot { animation: pulse 2.4s ease-in-out infinite; }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+/* --- kirish maydoni scrollbar --- */
+#input::-webkit-scrollbar { width: 6px; }
+#input::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 6px; }
+
+/* --- tanlov fokus (klaviatura) --- */
+button:focus-visible, input:focus-visible, textarea:focus-visible {
+  outline: 2px solid var(--accent-3);
+  outline-offset: 2px;
+}
+
+/* --- Android/iOS tagi: xavfsiz maydon --- */
+@supports (padding: env(safe-area-inset-bottom)) {
+  .composer { margin-bottom: calc(12px + env(safe-area-inset-bottom)); }
+  .chat { padding-bottom: calc(18px + env(safe-area-inset-bottom)); }
+  .sidebar { padding-bottom: calc(14px + env(safe-area-inset-bottom)); }
+}
+
+/* --- harakatlarni kamaytirish (sog'liq): barcha animatsiyalar off --- */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

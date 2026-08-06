@@ -201,8 +201,23 @@ function showWelcome() {
   const w = document.createElement("div");
   w.className = "welcome";
   w.innerHTML =
+    "<div class='welcome-logo'>✦</div>" +
     "<h2>" + (name ? "Assalomu alaykum, <span class='accent'>" + esc(name) + "</span>!" : "Sizning aqlli<br><span class='accent'>yordamchingiz</span>") + "</h2>" +
     "<p>Men noldan qurilgan sun'iy intellektman. Suhbatlashaman, kod yozaman, rasmni tahlil qilaman, internetdan izlayman va har suhbatda o'rganib boraman.</p>";
+  const chips = w.appendChild(document.createElement("div"));
+  chips.className = "welcome-chips";
+  [
+    "💬 Suhbat quraman",
+    "💻 Kod yozaman",
+    "📷 Rasm tahlil qilaman",
+    "🌍 Internetdan qidiraman",
+  ].forEach((t) => {
+    const c = document.createElement("button");
+    c.className = "chip";
+    c.textContent = t;
+    c.onclick = () => send("Nima qila olasan?");
+    chips.appendChild(c);
+  });
   chat.appendChild(w);
 }
 
@@ -280,13 +295,13 @@ async function sendImage(file) {
     const fd = new FormData();
     fd.append("file", file);
     const res = await fetch("/api/analyze-image", { method: "POST", body: fd });
-const data = await res.json();
+    const data = await res.json();
     if (!res.ok) throw Object.assign(new Error(data.error || "xato"), { status: res.status });
     typing.remove();
-    qMedia(data.url, kind === "video", q.prompt);
+    qMessage("ai", formatAnalysis(data));
   } catch (e) {
     typing.remove();
-    qMessage("ai", "⚠️ Generatsiya xatosi: " + (e.message || "qayta urinib ko'ring"));
+    qMessage("ai", "⚠️ Rasm tahlili xatosi: " + (e.message || "qayta urinib ko'ring"));
   }
   sending = false;
   sendBtn.disabled = false;

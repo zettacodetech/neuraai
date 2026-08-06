@@ -1,4 +1,4 @@
-const CACHE = "neura-ai-v1";
+const CACHE = "neura-ai-v2";
 const STATIC = ["/", "/static/style.css", "/static/app.js", "/static/manifest.json"];
 
 self.addEventListener("install", (e) => {
