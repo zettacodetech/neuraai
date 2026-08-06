@@ -359,20 +359,7 @@ def login(req: LoginRequest) -> JSONResponse:
     ):
         return JSONResponse({"error": "login yoki parol noto'g'ri"}, status_code=401)
     if req.client_id:
-        guest = db.get_user_by_token(req.client_id)
-        guest_row = db.conn.execute(
-            "SELECT id FROM users WHERE client_id = ?", (req.client_id,)
-        ).fetchone()
-        if guest_row and guest_row["id"] != user["id"]:
-            gid = guest_row["id"]
-            db.conn.execute(
-                "UPDATE conversations SET user_id = ? WHERE user_id = ?",
-                (user["id"], gid),
-            )
-            db.conn.execute(
-                "UPDATE messages SET user_id = ? WHERE user_id = ?", (user["id"], gid)
-            )
-            db.conn.execute("DELETE FROM users WHERE id = ?", (gid,))
+        db.transfer_guest(req.client_id, user["id"])
     token = new_token()
     db.set_token(user["id"], token)
     return JSONResponse(

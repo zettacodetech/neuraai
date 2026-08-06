@@ -252,6 +252,20 @@ class Database:
                 )
             return self._insert("INSERT INTO users DEFAULT VALUES")
 
+    def transfer_guest(self, client_id: str, user_id: int) -> None:
+        row = self._row("SELECT id FROM users WHERE client_id = ?", (client_id,))
+        if row and row["id"] != user_id:
+            gid = row["id"]
+            self._execute(
+                "UPDATE conversations SET user_id = ? WHERE user_id = ?",
+                (user_id, gid),
+            )
+            self._execute(
+                "UPDATE messages SET user_id = ? WHERE user_id = ?",
+                (user_id, gid),
+            )
+            self._execute("DELETE FROM users WHERE id = ?", (gid,))
+
     def get_user(self, user_id: int) -> dict | None:
         row = self._row(
             "SELECT id, username, name, token, client_id FROM users WHERE id = ?",
