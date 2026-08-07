@@ -157,6 +157,16 @@ def sw() -> FileResponse:
     return FileResponse(os.path.join(FRONTEND, "sw.js"), media_type="text/javascript")
 
 
+@app.middleware("http")
+async def no_cache_static(request, call_next):
+    """Statik fayllar va sahifa — har yuklashda yangilansin (eski dizayn muammosi)."""
+    response = await call_next(request)
+    path = request.url.path
+    if not path.startswith("/api/") and not path.startswith("/generated"):
+        response.headers["Cache-Control"] = "no-cache, must-revalidate"
+    return response
+
+
 app.mount("/static", StaticFiles(directory=FRONTEND), name="static")
 
 
