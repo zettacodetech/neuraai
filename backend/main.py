@@ -176,6 +176,53 @@ def gen_image(req: GenRequest) -> JSONResponse:
     return JSONResponse({"url": _gen_url(path), "prompt": req.prompt.strip()})
 
 
+# ================= Rasm generatsiya (O'zbekcha prompt + auto tarjima) =================
+
+
+class GenerateImageRequest(BaseModel):
+    prompt: str  # O'zbekcha: "toglar boglar gullar"
+    translate: bool = True  # Avtomatik inglizchaga o'tkazish
+
+
+@app.post("/api/generate-image")
+def generate_image_endpoint(req: GenerateImageRequest) -> JSONResponse:
+    """O'zbekcha promptdan rasm yaratish (auto inglizchaga o'tkazib)."""
+    prompt = req.prompt.strip()
+    if len(prompt) < 2:
+        return JSONResponse({"error": "prompt kamida 2 belgi"}, status_code=400)
+
+    final_prompt = prompt
+    if req.translate:
+        # LLM orqali inglizchaga o'tkazish
+        try:
+            translation = llm_chat(
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are a prompt translator for Stable Diffusion/Flux. "
+                        "Translate the user's prompt into a detailed, high-quality English prompt. "
+                        "Only return the English prompt, no extra text.",
+                    },
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=0.3,
+                max_tokens=200,
+            )
+            if translation and translation.strip():
+                final_prompt = translation.strip()
+        except Exception:
+            pass  # Tarjima muvaffaqiyatsiz bo'lsa, asl prompt ishlatiladi
+
+    path = generate_image(final_prompt)
+    return JSONResponse(
+        {
+            "url": _gen_url(path),
+            "prompt": prompt,
+            "translated_prompt": final_prompt if req.translate else None,
+        }
+    )
+
+
 @app.post("/api/gen/video")
 def gen_video(req: GenRequest) -> JSONResponse:
     if len(req.prompt.strip()) < 2:

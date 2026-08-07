@@ -1,6 +1,9 @@
 import { StatusBar } from 'expo-status-bar';
 import * as SecureStore from 'expo-secure-store';
 import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as IntentLauncher from 'expo-intent-launcher';
+import Constants from 'expo-constants';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -20,6 +23,18 @@ import {
 import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://neuraai.up.railway.app';
+const APP_VERSION: string = Constants.expoConfig?.version ?? '1.0.0';
+
+function isNewer(v1: string, v2: string): boolean {
+  const a = v1.split('.').map((n) => parseInt(n || '0', 10) || 0);
+  const b = v2.split('.').map((n) => parseInt(n || '0', 10) || 0);
+  const len = Math.max(a.length, b.length);
+  for (let i = 0; i < len; i++) {
+    const d = (a[i] ?? 0) - (b[i] ?? 0);
+    if (d !== 0) return d > 0;
+  }
+  return false;
+}
 
 const C = {
   bg: '#060a14',
@@ -65,6 +80,9 @@ function Chat() {
   const busyRef = useRef(false);
   const listRef = useRef<FlatList<Msg>>(null);
   const pulse = useRef(new Animated.Value(0)).current;
+  const [updateInfo, setUpdateInfo] = useState<{ version: string; url: string; size?: number } | null>(null);
+  const [updateProgress, setUpdateProgress] = useState<number | null>(null);
+  const updateRef = useRef<{ version: string; url: string; size?: number } | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -89,7 +107,62 @@ function Chat() {
         Animated.timing(pulse, { toValue: 0, duration: 2200, useNativeDriver: true }),
       ])
     ).start();
+    checkUpdate();
   }, [pulse]);
+
+  const checkUpdate = async () => {
+    try {
+      const res = await fetch(API_BASE + '/api/version', {
+        headers: { 'User-Agent': 'NeuraAI-Mobile' },
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.version && data.apk_url && isNewer(data.version, APP_VERSION)) {
+        updateRef.current = { version: data.version, url: data.apk_url, size: data.size };
+        setUpdateInfo(updateRef.current);
+      }
+    } catch {
+      /* offline — e'tiborsiz */
+    }
+  };
+
+  const installUpdate = async () => {
+    const info = updateRef.current;
+    if (!info) return;
+    try {
+      setUpdateProgress(0);
+      const fileUri = (FileSystem.cacheDirectory ?? '') + 'neuraai-update.apk';
+      const dl = FileSystem.createDownloadResumable(
+        info.url,
+        fileUri,
+        {},
+        (p) => {
+          const total = p.totalBytesExpectedToWrite;
+          if (total > 0) setUpdateProgress(Math.min(1, p.totalBytesWritten / total));
+        }
+      );
+      const result = await dl.downloadAsync();
+      if (!result || result.status !== 200) {
+        setUpdateProgress(null);
+        Alert.alert('Xato', 'Yuklab olish muvaffaqiyatsiz tugadi.');
+        return;
+      }
+      setUpdateProgress(null);
+      if (Platform.OS === 'android') {
+        const contentUri = await FileSystem.getContentUriAsync(result.uri);
+        await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
+          data: contentUri,
+          type: 'application/vnd.android.package-archive',
+          flags: 1,
+        });
+      } else {
+        Alert.alert('Yangilanish', 'Yangi versiyani veb-saytdan yuklab oling');
+      }
+    } catch {
+      setUpdateProgress(null);
+      Alert.alert('Xato', 'Yangilash amalga oshmadi. Keyinroq urinib ko\'ring.');
+    }
+  };
 
   const addMsg = useCallback((m: Omit<Msg, 'id'>) => {
     setMessages((prev) => [...prev, { ...m, id: nextId++ }]);
@@ -208,6 +281,25 @@ function Chat() {
     <View style={styles.root}>
       <StatusBar style="light" />
       <Header insets={insets} pulse={pulse} onClear={clearChat} />
+      {updateInfo ? (
+        <TouchableOpacity style={styles.updateBar} onPress={installUpdate} activeOpacity={0.8}>
+          {updateProgress === null ? (
+            <View style={styles.updateRow}>
+              <Text style={styles.updateText}>📲 Yangi versiya v{updateInfo.version} chiqdi</Text>
+              <Text style={styles.updateAction}>Yangilash</Text>
+            </View>
+          ) : (
+            <View style={styles.updateRow}>
+              <Text style={styles.updateText}>
+                Yuklanmoqda… {Math.round(updateProgress * 100)}%
+              </Text>
+              <View style={styles.updateTrack}>
+                <View style={[styles.updateFill, { width: `${Math.round(updateProgress * 100)}%` }]} />
+              </View>
+            </View>
+          )}
+        </TouchableOpacity>
+      ) : null}
       <KeyboardAvoidingView
         style={styles.body}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -636,6 +728,27 @@ const styles = StyleSheet.create({
   videoBoxText: { color: C.text, fontWeight: '600', fontSize: 14 },
   typingBubble: { flexDirection: 'row', gap: 6, alignItems: 'center', paddingVertical: 15, paddingHorizontal: 18 },
   typingDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: C.accent2 },
+  updateBar: {
+    backgroundColor: C.surface2,
+    borderBottomWidth: 1,
+    borderBottomColor: C.border,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  updateRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  updateText: { color: C.text, fontSize: 13, flex: 1 },
+  updateAction: {
+    color: '#0a0e1a',
+    backgroundColor: C.accent2,
+    fontWeight: '700',
+    fontSize: 13,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  updateTrack: { flex: 1, height: 6, borderRadius: 3, backgroundColor: C.border, overflow: 'hidden' },
+  updateFill: { height: 6, borderRadius: 3, backgroundColor: C.accent2 },
   inputWrap: { backgroundColor: C.surface, borderTopWidth: 1, borderTopColor: C.border, paddingTop: 10 },
   inputRow: {
     flexDirection: 'row',
