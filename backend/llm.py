@@ -8,9 +8,16 @@ Yangi modullarga bog'liq emas (faqat stdlib urllib). Kalitlar env orqali:
 - OPENROUTER_MODEL    (standart: ~openai/gpt-latest)
 - KIE_API_KEY         — kie.ai agregatori (arzon, OpenAI-compatible, deepseek-chat)
 - KIE_API_KEY_2       — kie.ai ikkinchi kalit (zaxira)
+- GEMINI_API_KEY      — Google Gemini (o'z API formati bilan)
+- GEMINI_MODEL        (standart: gemini-1.5-flash)
+- POLLINATIONS_API_KEY — Pollinations.ai (gen.pollinations.ai, OpenAI-compatible)
+- POLLINATIONS_MODEL  (standart: openai)
+- COHERE_API_KEY      — Cohere (OpenAI-compatible endpoint)
+- COHERE_MODEL        (standart: command-a-plus-05-2026)
 
-Provider tartibi: NEURA_LLM_PROVIDER env orqali tanlanadi (groq | openrouter | kie | auto).
-'auto' da: OpenRouter → KIE → Groq (kuchlidan arzonga zanjir).
+Provider tartibi: NEURA_LLM_PROVIDER env orqali tanlanadi
+(groq | openrouter | kie | gemini | ollama | pollinations | cohere | duckduckgo | auto).
+'auto' da: DDG → OpenRouter → KIE → Gemini → Pollinations → Ollama → Cohere → Groq.
 """
 
 import json
@@ -21,10 +28,14 @@ GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 KIE_BASE_URL = "https://api.kie.ai/api/v1"
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
+POLLINATIONS_BASE_URL = "https://gen.pollinations.ai/v1"
+COHERE_BASE_URL = "https://api.cohere.com/compatibility/v1"
 DEFAULT_GROQ_MODEL = "llama-3.3-70b-versatile"
 DEFAULT_OPENROUTER_MODEL = "~openai/gpt-latest"
 DEFAULT_KIE_MODEL = "deepseek-chat"
 DEFAULT_GEMINI_MODEL = "gemini-1.5-flash"
+DEFAULT_POLLINATIONS_MODEL = "openai"
+DEFAULT_COHERE_MODEL = "command-a-plus-05-2026"
 
 # Mavjud Gemini modellar (Google API da) — eng kuchlisi birinchi:
 # https://ai.google.dev/gemini-api/docs/models/gemini
@@ -225,12 +236,34 @@ def _build_providers() -> list:
             )
         )
 
-    # 5. Ollama (lokal, API key kerak emas, vision qo'llab-quvvatlanadi)
+    # 5. Pollinations (gen.pollinations.ai — OpenAI-compatible matn)
+    pollinations_key = os.environ.get("POLLINATIONS_API_KEY", "").strip()
+    if pollinations_key:
+        providers.append(
+            _Provider(
+                POLLINATIONS_BASE_URL,
+                pollinations_key,
+                os.environ.get("POLLINATIONS_MODEL", DEFAULT_POLLINATIONS_MODEL),
+            )
+        )
+
+    # 6. Cohere (OpenAI-compatible endpoint, kuchli command modellari)
+    cohere_key = os.environ.get("COHERE_API_KEY", "").strip()
+    if cohere_key:
+        providers.append(
+            _Provider(
+                COHERE_BASE_URL,
+                cohere_key,
+                os.environ.get("COHERE_MODEL", DEFAULT_COHERE_MODEL),
+            )
+        )
+
+    # 7. Ollama (lokal, API key kerak emas, vision qo'llab-quvvatlanadi)
     ollama_url = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
     ollama_model = os.environ.get("OLLAMA_MODEL", "llama3.3:8b")
     providers.append(_OllamaProvider(ollama_url, ollama_model))
 
-    # 6. Groq
+    # 8. Groq
     groq_key = (
         os.environ.get("NEURA_LLM_API_KEY", "").strip()
         or os.environ.get("GROQ_API_KEY", "").strip()
@@ -260,7 +293,11 @@ def _build_providers() -> list:
         providers.sort(key=lambda p: not isinstance(p, _OllamaProvider))
     elif mode == "duckduckgo":
         providers.sort(key=lambda p: not isinstance(p, _DuckDuckGoProvider))
-    # auto: DuckDuckGo → OpenRouter → KIE → Gemini → Ollama → Groq
+    elif mode == "pollinations":
+        providers.sort(key=lambda p: _base(p) != POLLINATIONS_BASE_URL)
+    elif mode == "cohere":
+        providers.sort(key=lambda p: _base(p) != COHERE_BASE_URL)
+    # auto: DDG → OpenRouter → KIE → Gemini → Pollinations → Ollama → Cohere → Groq
     return providers
 
 
@@ -320,7 +357,7 @@ def llm_chat(
                 content = data["choices"][0]["message"]["content"]
             if isinstance(content, str) and content.strip():
                 return content.strip()
-            return None
+            continue  # bo'sh javob — keyingi providerga o'tamiz
         except Exception as exc:  # keyingi providerga o'tamiz
             last_error = exc
             continue

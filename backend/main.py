@@ -479,12 +479,31 @@ class MusicRequest(BaseModel):
 
 @app.post("/api/generate-music")
 async def generate_music(req: MusicRequest) -> JSONResponse:
-    """Suno API (lokal yoki bulut) orqali musiqa generatsiya."""
+    """Qo'shiq/musiqa generatsiya: Pollinations (elevenmusic) → Suno API."""
+    # 1) Pollinations elevenmusic (bepul/бalans kerak bo'lsa 402 → Suno)
+    try:
+        import pollinations
+
+        if pollinations.available():
+            data = pollinations.generate_music(req.prompt)
+            if data:
+                name = f"poll_music_{int(time.time() * 1000) % 1000000}.mp3"
+                path = os.path.join(GEN_DIR, name)
+                with open(path, "wb") as f:
+                    f.write(data)
+                return JSONResponse(
+                    {
+                        "success": True,
+                        "audio_url": _gen_url(path),
+                        "provider": "pollinations",
+                    }
+                )
+    except Exception:
+        pass
+
+    # 2) Suno API (lokal yoki bulut) — eski usul
     suno_url = os.environ.get("SUNO_API_URL", "http://localhost:3000/api/generate")
     try:
-        import urllib.request
-        import json
-
         payload = json.dumps(
             {
                 "prompt": req.prompt,
@@ -504,17 +523,50 @@ async def generate_music(req: MusicRequest) -> JSONResponse:
         with urllib.request.urlopen(req_obj, timeout=120) as r:
             data = json.loads(r.read().decode())
 
-        # Suno response: [{"audio_url": "..."}]
         audio_url = data[0].get("audio_url") if data else None
-        return JSONResponse({"success": True, "audio_url": audio_url})
+        return JSONResponse(
+            {"success": True, "audio_url": audio_url, "provider": "suno"}
+        )
     except Exception as e:
         return JSONResponse(
             {
                 "error": f"Musiqa generatsiya xato: {e}",
-                "hint": "Lokal Suno API: `git clone https://github.com/suno-ai/suno-api && cd suno-api && npm install && npm start` (port 3000)",
+                "hint": "Pollinations hisobida balans kerak (enter.pollinations.ai). Suno lokal: `git clone https://github.com/suno-ai/suno-api && cd suno-api && npm install && npm start` (port 3000)",
             },
             status_code=503,
         )
+
+
+class VoiceRequest(BaseModel):
+    text: str
+    voice: str = ""  # af_heart, af_bella, am_onyx, ... (ixtiyoriy)
+
+
+@app.post("/api/generate-voice")
+async def generate_voice(req: VoiceRequest) -> JSONResponse:
+    """Matndi ovozga aylantirish (TTS) — Pollinations elevenlabs/kokoro."""
+    if len(req.text.strip()) < 1:
+        return JSONResponse({"error": "matn kiritilmadi"}, status_code=400)
+    try:
+        import pollinations
+
+        if not pollinations.available():
+            return JSONResponse(
+                {"error": "POLLINATIONS_API_KEY o'rnatilmagan"}, status_code=503
+            )
+        data = pollinations.generate_audio(req.text.strip(), voice=req.voice or None)
+        if not data:
+            return JSONResponse(
+                {"error": "Pollinations balansi yetarli emas yoki xato"},
+                status_code=402,
+            )
+        name = f"poll_voice_{int(time.time() * 1000) % 1000000}.mp3"
+        path = os.path.join(GEN_DIR, name)
+        with open(path, "wb") as f:
+            f.write(data)
+        return JSONResponse({"success": True, "audio_url": _gen_url(path)})
+    except Exception as e:
+        return JSONResponse({"error": f"Ovoz generatsiya xato: {e}"}, status_code=500)
 
 
 # ================= Canvas / Dizayn shablonlari =================
@@ -771,13 +823,16 @@ def conversation_messages(conv_id: int, token: str = "") -> JSONResponse:
 
 @app.get("/api/models")
 def list_models() -> JSONResponse:
-    """OpenRouter'ning barcha modellari ro'yxati (5 daqiqa cache)."""
+    """Barcha provider modellari ro'yxati (OpenRouter + Cohere + Pollinations, 5 daqiqa cache)."""
     import time as _time
 
     now = _time.time()
     if _MODELS_CACHE["ts"] and now - _MODELS_CACHE["ts"] < 300:
         return JSONResponse({"items": _MODELS_CACHE["items"]})
 
+    items: list = []
+
+    # 1) OpenRouter
     url = OPENROUTER_BASE_URL + "/models"
     api_key = os.environ.get("OPENROUTER_API_KEY", "").strip()
     req = urllib.request.Request(
@@ -790,20 +845,74 @@ def list_models() -> JSONResponse:
     try:
         with urllib.request.urlopen(req, timeout=15) as r:
             data = json.loads(r.read().decode("utf-8"))
-        items = [
+        items.extend(
             {
                 "id": m["id"],
                 "name": m.get("name", m["id"]),
                 "ctx": m.get("context_length", 0),
                 "pricing": m.get("pricing", {}),
+                "provider": "openrouter",
             }
             for m in data.get("data", [])
-        ]
-        _MODELS_CACHE["items"] = items
-        _MODELS_CACHE["ts"] = now
-        return JSONResponse({"items": items})
+        )
     except Exception:
-        return JSONResponse({"items": _MODELS_CACHE["items"]}, status_code=502)
+        pass
+
+    # 2) Cohere
+    cohere_key = os.environ.get("COHERE_API_KEY", "").strip()
+    if cohere_key:
+        try:
+            req2 = urllib.request.Request(
+                "https://api.cohere.com/v2/models",
+                headers={
+                    "Authorization": "Bearer " + cohere_key,
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                },
+            )
+            with urllib.request.urlopen(req2, timeout=15) as r:
+                data2 = json.loads(r.read().decode("utf-8"))
+            items.extend(
+                {
+                    "id": m["name"],
+                    "name": m["name"],
+                    "ctx": m.get("context_length", 0),
+                    "pricing": {},
+                    "provider": "cohere",
+                    "endpoints": m.get("endpoints", []),
+                }
+                for m in data2.get("models", [])
+            )
+        except Exception:
+            pass
+
+    # 3) Pollinations
+    poll_key = os.environ.get("POLLINATIONS_API_KEY", "").strip()
+    if poll_key:
+        try:
+            req3 = urllib.request.Request(
+                "https://gen.pollinations.ai/models",
+                headers={"Authorization": "Bearer " + poll_key},
+            )
+            with urllib.request.urlopen(req3, timeout=20) as r:
+                data3 = json.loads(r.read().decode("utf-8"))
+            items.extend(
+                {
+                    "id": m.get("name", m.get("id", "")),
+                    "name": m.get("title", m.get("name", "")),
+                    "ctx": m.get("max_referenced_tokens") or m.get("context_length", 0),
+                    "pricing": m.get("pricing", {}),
+                    "provider": "pollinations",
+                    "category": m.get("category", ""),
+                }
+                for m in data3
+            )
+        except Exception:
+            pass
+
+    _MODELS_CACHE["items"] = items
+    _MODELS_CACHE["ts"] = now
+    return JSONResponse({"items": items})
 
 
 # ================= admin =================

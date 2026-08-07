@@ -146,8 +146,25 @@ def _load_svd():
 def generate_image(prompt: str) -> str:
     """Prompt'ga mos PNG yaratib, yo'lini qaytaradi.
 
-    Tartib: deAPI (haqiqiy AI) → Magic Hour (haqiqiy AI) → GPU SDXL → protsur.
+    Tartib: Pollinations (haqiqiy AI) → deAPI → Magic Hour → GPU SDXL → protsur.
     """
+    try:
+        import pollinations
+
+        if pollinations.available():
+            data = pollinations.generate_image(prompt)
+            if data:
+                seed = _seed(prompt)
+                path = os.path.join(
+                    _OUT_DIR,
+                    f"poll_img_{seed:08x}_{int(time.time() * 1000) % 100000}.webp",
+                )
+                with open(path, "wb") as f:
+                    f.write(data)
+                return path
+    except Exception:
+        pass
+
     try:
         from deapi import available as de_available
         from deapi import generate_image as de_image
@@ -188,11 +205,28 @@ def generate_image(prompt: str) -> str:
 
 
 def generate_video(prompt: str) -> str:
-    """Prompt'aga mos qisqa video (MP4) yarat.
+    """Prompt'a mos qisqa video (MP4) yarat.
 
-    Tartib: JSON2Video (real render) → deAPI (LTX-Video) → Magic Hour
-    (haqiqiy AI) → GPU SVD → protsur animatsiya.
+    Tartib: Pollinations (real AI) → JSON2Video (real render) → deAPI
+    (LTX-Video) → Magic Hour (haqiqiy AI) → GPU SVD → protsur animatsiya.
     """
+    try:
+        import pollinations
+
+        if pollinations.available():
+            data = pollinations.generate_video(prompt)
+            if data:
+                seed = _seed(prompt)
+                path = os.path.join(
+                    _OUT_DIR,
+                    f"poll_vid_{seed:08x}_{int(time.time() * 1000) % 100000}.mp4",
+                )
+                with open(path, "wb") as f:
+                    f.write(data)
+                return path
+    except Exception:
+        pass
+
     try:
         from json2video import available as j2v_available
         from json2video import generate_video as j2v_video
