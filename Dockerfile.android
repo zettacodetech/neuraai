@@ -32,6 +32,10 @@ RUN cd mobile && npm ci
 COPY mobile ./mobile
 RUN cd mobile/android \
     && echo "sdk.dir=/opt/android-sdk" > local.properties \
+    && keytool -genkeypair -v -storetype PKCS12 -keystore app/debug.keystore \
+       -storepass android -alias androiddebugkey -keypass android \
+       -keyalg RSA -keysize 2048 -validity 10000 \
+       -dname "CN=Android Debug,O=Android,C=US" \
     && ./gradlew :app:assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon
 RUN cp mobile/android/app/build/outputs/apk/release/app-release.apk /app/neuraai.apk
 
