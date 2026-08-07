@@ -424,6 +424,14 @@ textarea, input { font-family: var(--ff); }
 .api-key-box code { color: var(--cyan); font-size: 0.92rem; }
 .key-actions { display: flex; gap: 10px; }
 .key-actions .auth-submit { flex: 1; }
+.key-models { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.key-model { display: block; cursor: pointer; }
+.key-model input { display: none; }
+.key-model span { display: flex; flex-direction: column; gap: 2px; padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: rgba(255,255,255,0.04); transition: 0.2s; }
+.key-model span small { color: var(--muted); font-size: 0.72rem; }
+.key-model input:checked + span { border-color: var(--violet); background: rgba(109,92,255,0.14); box-shadow: 0 0 0 1px var(--violet); }
+.key-meta { font-size: 0.82rem; color: var(--muted); margin: 4px 0 12px; }
+.key-meta b { color: var(--text); }
 .ghost-btn { border: 1px solid var(--border); border-radius: 13px; padding: 14px; font-weight: 600; color: var(--text); background: var(--panel); }
 .ghost-btn.danger { color: #f87171; }
 .api-howto { margin-top: 18px; font-size: 0.85rem; color: var(--muted); }

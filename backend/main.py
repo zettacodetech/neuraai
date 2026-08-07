@@ -789,15 +789,30 @@ def session(client_id: str = "") -> JSONResponse:
 # ================= API kalitlari (bepul, limitle) =================
 
 
+class KeyCreateRequest(BaseModel):
+    token: str = ""
+    name: str = ""
+    models: list[str] = []
+
+
 @app.post("/api/key/create")
-def api_key_create(token: str = "") -> JSONResponse:
+def api_key_create(req: KeyCreateRequest) -> JSONResponse:
     db = get_db()
-    user = db.get_user_by_token(token)
+    user = db.get_user_by_token(req.token)
     if not user:
         return JSONResponse({"error": "kirish talab qilinadi"}, status_code=401)
+    name = (req.name or "").strip()[:60] or "Bosh kalit"
+    models = req.models[:20]
     key = new_token()
-    db.set_api_key(user["id"], key)
-    return JSONResponse({"key": key, "limit_per_minute": _API_RATE_LIMIT})
+    db.set_api_key(user["id"], key, name=name, models=",".join(models))
+    return JSONResponse(
+        {
+            "key": key,
+            "name": name,
+            "models": models,
+            "limit_per_minute": _API_RATE_LIMIT,
+        }
+    )
 
 
 @app.get("/api/key")
@@ -809,7 +824,15 @@ def api_key_get(token: str = "") -> JSONResponse:
     row = db.get_api_key(user["id"])
     if not row:
         return JSONResponse({"key": None})
-    return JSONResponse({"key": row["key"], "limit_per_minute": _API_RATE_LIMIT})
+    models = [m for m in (row.get("models") or "").split(",") if m]
+    return JSONResponse(
+        {
+            "key": row["key"],
+            "name": row.get("name") or "Bosh kalit",
+            "models": models,
+            "limit_per_minute": _API_RATE_LIMIT,
+        }
+    )
 
 
 @app.delete("/api/key")

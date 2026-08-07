@@ -68,6 +68,8 @@ CREATE TABLE IF NOT EXISTS api_keys (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id    INTEGER NOT NULL UNIQUE,
     key        TEXT NOT NULL UNIQUE,
+    name       TEXT,
+    models     TEXT,
     created_at TEXT DEFAULT (datetime('now'))
 );
 """
@@ -133,6 +135,8 @@ _PG_DDL = [
         id         BIGSERIAL PRIMARY KEY,
         user_id    BIGINT NOT NULL UNIQUE,
         key        TEXT NOT NULL UNIQUE,
+        name       TEXT,
+        models     TEXT,
         created_at TIMESTAMPTZ DEFAULT now()
     )
     """,
@@ -236,6 +240,10 @@ class Database:
                         cur.execute(
                             f"ALTER TABLE users ADD COLUMN IF NOT EXISTS {col} TEXT"
                         )
+                    for col in ("name", "models"):
+                        cur.execute(
+                            f"ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS {col} TEXT"
+                        )
                 self.conn.commit()
             return
         with self._lock:
@@ -256,6 +264,10 @@ class Database:
                 self.conn.execute(
                     "ALTER TABLE messages ADD COLUMN conversation_id INTEGER"
                 )
+            key_cols = [r[1] for r in self.conn.execute("PRAGMA table_info(api_keys)")]
+            for col in ("name", "models"):
+                if col not in key_cols:
+                    self.conn.execute(f"ALTER TABLE api_keys ADD COLUMN {col} TEXT")
 
     # ================= users =================
     def get_or_create_user(
@@ -373,17 +385,26 @@ class Database:
             self._execute("UPDATE users SET token = ? WHERE id = ?", (token, user_id))
 
     # ================= api keys (bepul, limitle) =================
-    def set_api_key(self, user_id: int, key: str) -> None:
+    def set_api_key(
+        self,
+        user_id: int,
+        key: str,
+        name: str = "",
+        models: str = "",
+    ) -> None:
         with self._lock:
             self._execute(
-                "INSERT INTO api_keys (user_id, key) VALUES (?, ?) "
-                "ON CONFLICT(user_id) DO UPDATE SET key = excluded.key",
-                (user_id, key),
+                "INSERT INTO api_keys (user_id, key, name, models) VALUES (?, ?, ?, ?) "
+                "ON CONFLICT(user_id) DO UPDATE SET "
+                "key = excluded.key, name = COALESCE(excluded.name, api_keys.name), "
+                "models = COALESCE(excluded.models, api_keys.models)",
+                (user_id, key, name, models),
             )
 
     def get_api_key(self, user_id: int) -> dict | None:
         row = self._row(
-            "SELECT id, user_id, key, created_at FROM api_keys WHERE user_id = ?",
+            "SELECT id, user_id, key, name, models, created_at "
+            "FROM api_keys WHERE user_id = ?",
             (user_id,),
         )
         return dict(row) if row else None

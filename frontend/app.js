@@ -596,14 +596,27 @@ async function openKeyModal() {
   }
   keyBackdrop.hidden = false;
   keyError.textContent = "";
+  const keyMake = document.getElementById("keyMake");
+  const keyView = document.getElementById("keyView");
+  document.getElementById("keyName").value = "";
+  document.querySelectorAll(".key-model input[data-m]").forEach((c) => {
+    c.checked = c.dataset.m === "fast";
+  });
   try {
     const data = await api("/api/key?token=" + encodeURIComponent(me.token));
-    keyCreateBtn.hidden = !!data.key;
-    keyCopyBtn.hidden = !data.key;
-    keyRevokeBtn.hidden = !data.key;
-    apiKeyBox.innerHTML = data.key
-      ? '<code id="apiKeyVal">' + esc(data.key) + "</code>"
-      : '<span class="muted">Sizda hozircha kalit yo\'q. Yaratib oling.</span>';
+    if (data.key) {
+      keyMake.hidden = true;
+      keyView.hidden = false;
+      apiKeyBox.innerHTML = '<code id="apiKeyVal">' + esc(data.key) + "</code>";
+      const meta = document.getElementById("keyMeta");
+      const models = (data.models && data.models.length)
+        ? data.models.map((m) => m === "think" ? "🧠 Aqlli" : "⚡ Tez").join(" · ")
+        : "⚡ Tez";
+      meta.innerHTML = "Nomi: <b>" + esc(data.name || "Bosh kalit") + "</b> &nbsp;·&nbsp; Modellar: <b>" + models + "</b>";
+    } else {
+      keyMake.hidden = false;
+      keyView.hidden = true;
+    }
   } catch (e) {
     keyError.textContent = e.message;
   }
@@ -611,17 +624,26 @@ async function openKeyModal() {
 
 keyCreateBtn.onclick = async () => {
   if (!me) { closeAuth(); openAuth(); return; }
+  const name = document.getElementById("keyName").value.trim();
+  const models = Array.from(document.querySelectorAll(".key-model input[data-m]:checked"))
+    .map((c) => c.dataset.m);
+  if (!models.length) {
+    keyError.textContent = "Kamida bitta modelni tanlang.";
+    return;
+  }
   keyCreateBtn.disabled = true;
   keyError.textContent = "";
   try {
     const data = await api("/api/key/create", {
       method: "POST",
-      body: JSON.stringify({ token: me.token }),
+      body: JSON.stringify({ token: me.token, name: name || "Bosh kalit", models }),
     });
-    apiKeyBox.innerHTML = '<span id="apiKeyVal" class="key-val">' + esc(data.key) + "</span>";
-    keyCreateBtn.hidden = true;
-    keyCopyBtn.hidden = false;
-    keyRevokeBtn.hidden = false;
+    document.getElementById("keyMake").hidden = true;
+    document.getElementById("keyView").hidden = false;
+    apiKeyBox.innerHTML = '<code id="apiKeyVal">' + esc(data.key) + "</code>";
+    const meta = document.getElementById("keyMeta");
+    const modelsTxt = (data.models || []).map((m) => m === "think" ? "🧠 Aqlli" : "⚡ Tez").join(" · ");
+    meta.innerHTML = "Nomi: <b>" + esc(data.name) + "</b> &nbsp;·&nbsp; Modellar: <b>" + modelsTxt + "</b>";
     navigator.clipboard && navigator.clipboard.writeText(data.key).catch(() => {});
   } catch (e) {
     keyError.textContent = e.message;
@@ -639,10 +661,10 @@ keyRevokeBtn.onclick = async () => {
   if (!me) return;
   try {
     await api("/api/key?token=" + encodeURIComponent(me.token), { method: "DELETE" });
-    apiKeyBox.innerHTML = '<span class="muted">Kalit bekor qilindi.</span>';
-    keyCreateBtn.hidden = false;
-    keyCopyBtn.hidden = true;
-    keyRevokeBtn.hidden = true;
+    document.getElementById("keyView").hidden = true;
+    document.getElementById("keyMake").hidden = false;
+    document.getElementById("keyName").value = "";
+    keyError.textContent = "Kalit bekor qilindi.";
   } catch (e) {
     keyError.textContent = e.message;
   }

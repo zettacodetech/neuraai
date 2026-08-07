@@ -346,15 +346,35 @@ $ python cli.py --gen-video "panorama"</code></pre>
       <div class="modal-logo">🔑</div>
       <h2>API kaliti</h2>
       <p class="modal-sub">Kalit <b>mutlaqo bepul</b>. Limit: <b>20 so'rov / daqiqa</b>.</p>
-      <div class="api-key-box" id="apiKeyBox">
-        <span class="muted">Sizda hozircha kalit yo'q. Yaratib oling.</span>
+      <div id="keyMake" hidden>
+        <div class="field">
+          <label for="keyName">Kalit nomi</label>
+          <input id="keyName" name="keyName" placeholder="Misol: Mening botim" maxlength="60" />
+        </div>
+        <div class="field">
+          <label>Modellarni tanlang</label>
+          <div class="key-models">
+            <label class="key-model"><input type="checkbox" data-m="fast" checked />
+              <span><b>⚡ Tez</b><small>gemini-flash-latest · 1–3s</small></span></label>
+            <label class="key-model"><input type="checkbox" data-m="think" />
+              <span><b>🧠 Aqlli</b><small>command-a-plus-05-2026 · 5–6s</small></span></label>
+          </div>
+        </div>
+        <div class="key-actions">
+          <button class="auth-submit" id="keyCreateBtn">Kalit yaratish</button>
+        </div>
+      </div>
+      <div id="keyView" hidden>
+        <div class="api-key-box" id="apiKeyBox">
+          <span class="muted">Sizda hozircha kalit yo'q. Yaratib oling.</span>
+        </div>
+        <div class="key-meta" id="keyMeta"></div>
+        <div class="key-actions">
+          <button class="ghost-btn" id="keyCopyBtn">Nusxalash</button>
+          <button class="ghost-btn danger" id="keyRevokeBtn">Bekor qilish</button>
+        </div>
       </div>
       <p class="form-error" id="keyError"></p>
-      <div class="key-actions">
-        <button class="auth-submit" id="keyCreateBtn">Kalit yaratish</button>
-        <button class="ghost-btn" id="keyCopyBtn" hidden>Nusxalash</button>
-        <button class="ghost-btn danger" id="keyRevokeBtn" hidden>Bekor qilish</button>
-      </div>
       <div class="api-howto">
         <b>Dasturingizda foydalanish:</b>
         <pre>curl -X POST https://neuraai.up.railway.app/api/chat \
