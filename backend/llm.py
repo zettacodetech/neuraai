@@ -245,13 +245,14 @@ def _build_providers() -> list:
         )
 
     mode = os.environ.get("NEURA_LLM_PROVIDER", "auto").strip().lower()
+    _base = lambda p: getattr(p, "base_url", "")
     if mode == "groq":
-        providers.sort(key=lambda p: p.base_url != GROQ_BASE_URL)
+        providers.sort(key=lambda p: _base(p) != GROQ_BASE_URL)
     elif mode == "openrouter":
-        providers.sort(key=lambda p: getattr(p, "base_url", "") != OPENROUTER_BASE_URL)
+        providers.sort(key=lambda p: _base(p) != OPENROUTER_BASE_URL)
     elif mode == "kie":
         providers.sort(
-            key=lambda p: (p.base_url == GROQ_BASE_URL, p.base_url != KIE_BASE_URL)
+            key=lambda p: (_base(p) == GROQ_BASE_URL, _base(p) != KIE_BASE_URL)
         )
     elif mode == "gemini":
         providers.sort(key=lambda p: not isinstance(p, _GeminiProvider))
