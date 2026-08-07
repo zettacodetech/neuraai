@@ -65,7 +65,7 @@ def _api_key_allowed(key: str) -> bool:
 class ChatRequest(BaseModel):
     message: str
     user_id: str | int | None = None
-    telegram_id: int | None = None
+    telegram_id: int | str | None = None
     token: str | None = None
     conversation_id: int | None = None
     api_key: str | None = None
@@ -309,9 +309,15 @@ def chat(req: ChatRequest) -> JSONResponse:
     if user:
         user_id = user["id"]
     else:
-        user_id = db.get_or_create_user(
-            req.telegram_id, str(req.user_id) if req.user_id else None
-        )
+        tg = req.telegram_id
+        uid_str = str(req.user_id) if req.user_id else None
+        if isinstance(tg, int):
+            user_id = db.get_or_create_user(tg, uid_str)
+        elif tg:
+            # Eski ilovalar telegram_id'ga "mobile_..." satrini yuboradi
+            user_id = db.get_or_create_user(None, str(tg))
+        else:
+            user_id = db.get_or_create_user(None, uid_str)
 
     conv_id = req.conversation_id
     if conv_id is not None:

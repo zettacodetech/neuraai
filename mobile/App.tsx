@@ -195,7 +195,7 @@ function Chat() {
     try {
       const data = await post('/api/chat', {
         message: clean,
-        telegram_id: uidRef.current,
+        user_id: uidRef.current,
         conversation_id: convRef.current ? Number(convRef.current) : null,
       });
       convRef.current = String(data.conversation_id);
