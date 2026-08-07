@@ -29,6 +29,8 @@ DEFAULT_GEMINI_MODEL = "gemini-1.5-flash"
 # Mavjud Gemini modellar (Google API da) — eng kuchlisi birinchi:
 # https://ai.google.dev/gemini-api/docs/models/gemini
 GEMINI_MODELS = [
+    "gemini-2.5-flash",  # Eng so'nggi, tez va kuchli (2025)
+    "gemini-flash-latest",  # Yangi alias (Google hujjatidan)
     "gemini-1.5-pro",  # Eng kuchli, murakkab vazifalar uchun
     "gemini-1.5-pro-002",  # Yangilangan Pro (sentyabr 2024)
     "gemini-1.5-flash",  # Tez va arzon, ko'pgina vazifalar uchun
