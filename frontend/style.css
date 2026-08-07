@@ -542,6 +542,7 @@ body {
 
 :root {
   --accent-3: #22d3ee;
+  --accent-1: #7c6cff;
   --glass: rgba(255, 255, 255, 0.06);
   --ring: linear-gradient(135deg, rgba(124, 108, 255, 0.55), rgba(34, 211, 238, 0.35));
 }
@@ -637,6 +638,7 @@ body {
   background: linear-gradient(180deg, rgba(124, 108, 255, 0.16), rgba(34, 211, 238, 0.06));
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
 }
+.welcome-card:active { transform: translateY(0) scale(0.98); }
 .welcome-card .card-emoji {
   width: 44px; height: 44px;
   border-radius: 13px;

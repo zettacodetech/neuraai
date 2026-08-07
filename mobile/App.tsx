@@ -376,10 +376,10 @@ function Welcome({
 }) {
   const glow = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.25, 0.8] });
   const FEATURES = [
-    { e: '💬', t: 'Suhbat', d: 'O\'zbek tilida javob' },
-    { e: '💻', t: 'Kod', d: 'Dasturlash kodlari' },
-    { e: '🌍', t: 'Qidiruv', d: 'Internet ma\'lumoti' },
-    { e: '🎨', t: 'Rasm yarat', d: 'Promptdan rasm' },
+    { e: '💬', t: 'Suhbat', d: 'O\'zbek tilida javob', g: ['#6d5cff', '#8f7bff'] },
+    { e: '💻', t: 'Kod', d: 'Dasturlash kodlari', g: ['#0ea5e9', '#00d4ff'] },
+    { e: '🌍', t: 'Qidiruv', d: 'Internet ma\'lumoti', g: ['#10b981', '#34d399'] },
+    { e: '🎨', t: 'Rasm yarat', d: 'Promptdan rasm', g: ['#f472b6', '#ff6ec7'] },
   ];
   return (
     <View style={styles.welcome}>
@@ -403,11 +403,13 @@ function Welcome({
         {FEATURES.map((f) => (
           <TouchableOpacity
             key={f.t}
-            style={styles.featCard}
+            style={[styles.featCard, { borderTopColor: f.g[1] }]}
             onPress={f.t === 'Rasm yarat' ? onGen : () => onChip('Neura AI nima qila oladi?')}
             activeOpacity={0.7}
           >
-            <Text style={styles.featEmoji}>{f.e}</Text>
+            <LinearGradient colors={f.g as [string, string]} style={styles.featEmojiWrap} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+              <Text style={styles.featEmoji}>{f.e}</Text>
+            </LinearGradient>
             <Text style={styles.featTitle}>{f.t}</Text>
             <Text style={styles.featDesc}>{f.d}</Text>
           </TouchableOpacity>
@@ -485,7 +487,7 @@ function MsgBubble({ m }: { m: Msg }) {
               <Text style={styles.userText}>{m.text}</Text>
             </LinearGradient>
           ) : (
-            <View style={styles.aiBubble}>
+            <View style={styles.aiBubbleWrap}>
               <Text style={styles.aiText}>{m.text}</Text>
             </View>
           )
@@ -523,7 +525,7 @@ function Typing() {
           <Text style={styles.aiAvatarText}>✦</Text>
         </LinearGradient>
       </View>
-      <View style={[styles.aiBubble, styles.typingBubble]}>
+      <View style={[styles.aiBubbleWrap, styles.typingBubble]}>
         {dots.map((d, i) => (
           <Animated.View
             key={i}
@@ -705,12 +707,21 @@ const styles = StyleSheet.create({
     backgroundColor: C.surface,
     borderWidth: 1,
     borderColor: C.border,
+    borderTopWidth: 2,
     borderRadius: 18,
     paddingVertical: 16,
     paddingHorizontal: 14,
     alignItems: 'center',
   },
-  featEmoji: { fontSize: 24, marginBottom: 6 },
+  featEmojiWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  featEmoji: { fontSize: 22 },
   featTitle: { color: C.text, fontSize: 14, fontWeight: '700' },
   featDesc: { color: C.muted, fontSize: 11.5, marginTop: 2, textAlign: 'center' },
   chip: {
@@ -740,19 +751,19 @@ const styles = StyleSheet.create({
   },
   aiAvatarText: { color: '#fff', fontSize: 13 },
   userBubbleWrap: { maxWidth: '82%' },
-  aiBubbleWrap: { maxWidth: '78%' },
   gradBubble: {
     borderRadius: 18,
     borderBottomRightRadius: 6,
     paddingHorizontal: 14,
     paddingVertical: 10,
   },
-  aiBubble: {
-    backgroundColor: C.surface,
+  aiBubbleWrap: {
+    maxWidth: '78%',
     borderRadius: 18,
     borderTopLeftRadius: 6,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: C.border,
+    backgroundColor: C.surface,
     paddingHorizontal: 14,
     paddingVertical: 10,
   },

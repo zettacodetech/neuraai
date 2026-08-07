@@ -61,6 +61,17 @@ function esc(t) {
   return d.innerHTML;
 }
 
+function cacheUser(u) {
+  if (!u || u.guest) return;
+  localStorage.setItem("neura_user", JSON.stringify({ username: u.username, name: u.name }));
+}
+function loadCachedUser() {
+  try { return JSON.parse(localStorage.getItem("neura_user") || "null"); } catch (e) { return null; }
+}
+function removeCachedUser() {
+  localStorage.removeItem("neura_user");
+}
+
 function fmtDate(iso) {
   try {
     const d = new Date(iso.replace(" ", "T") + "Z");
@@ -453,6 +464,7 @@ authForm.onsubmit = async (e) => {
     });
     me = { token: data.token, username: data.username, name: data.name };
     localStorage.setItem("neura_token", data.token);
+    cacheUser(me);
     closeAuth();
     newChat();
     renderUser();
@@ -475,13 +487,14 @@ function renderUser() {
   const initial = (me.name || me.username || "?").charAt(0).toUpperCase();
   sideUser.innerHTML =
     '<div class="user-ava">' + esc(initial) + "</div>" +
-    '<div class="user-info"><div class="user-name">' + esc(me.name || me.username || "Mehmon") + '</div><div class="user-login">' + (me.guest ? "mehmon" : "@" + esc(me.username)) + "</div></div>" +
+    '<div class="user-info"><div class="user-name">' + esc(me.name || me.username || "Mehmon") + '</div><div class="user-login">' + (me.guest ? "mehmon" : "@" + esc(me.username.toLowerCase())) + "</div></div>" +
     '<button class="logout-btn" id="logoutBtn" title="Chiqish">' + (me.guest ? "Chiqish" : "Chiqish") + "</button>";
   document.getElementById("logoutBtn").onclick = async () => {
     await api("/api/logout?token=" + encodeURIComponent(me.token)).catch(() => {});
     me = null;
     currentConv = null;
     localStorage.removeItem("neura_token");
+    removeCachedUser();
     chat.innerHTML = "";
     renderUser();
     showWelcome();
@@ -619,19 +632,31 @@ async function boot() {
   };
 
   const token = localStorage.getItem("neura_token");
+  const cachedUser = loadCachedUser();
+  let authFail = false;
   if (token) {
     try {
       const u = await api("/api/me?token=" + encodeURIComponent(token));
       me = { token, username: u.username, name: u.name };
+      cacheUser(me);
       currentConv = null;
       renderUser();
       await refreshConversations();
     } catch (e) {
-      localStorage.removeItem("neura_token");
-      me = null;
+      if (e.status === 401) {
+        localStorage.removeItem("neura_token");
+        removeCachedUser();
+        me = null;
+        authFail = true;
+      } else {
+        me = cachedUser
+          ? { token, username: cachedUser.username, name: cachedUser.name, offline: true }
+          : null;
+        renderUser();
+      }
     }
   }
-  if (!me) {
+  if (!me && !authFail) {
     try {
       const s = await api("/api/session?client_id=" + encodeURIComponent(CLIENT_ID));
       me = { token: s.token, username: "", name: "", guest: true };
