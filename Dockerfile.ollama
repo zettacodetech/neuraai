@@ -21,4 +21,4 @@ RUN chmod +x /pull-models.sh
 EXPOSE 11434
 
 # Ollama server + modellarni yuklash
-CMD ["/bin/sh", "-c", "/pull-models.sh & ollama serve"]
+CMD ["/bin/sh", "-c", "/pull-models.sh"]
