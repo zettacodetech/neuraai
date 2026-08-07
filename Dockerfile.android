@@ -30,8 +30,8 @@ COPY mobile/package.json mobile/package-lock.json ./mobile/
 RUN cd mobile && npm ci
 
 COPY mobile ./mobile
-RUN cd mobile \
-    && echo "sdk.dir=/opt/android-sdk" > android/local.properties \
+RUN cd mobile/android \
+    && echo "sdk.dir=/opt/android-sdk" > local.properties \
     && ./gradlew :app:assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon
 RUN cp mobile/android/app/build/outputs/apk/release/app-release.apk /app/neuraai.apk
 
