@@ -14,6 +14,9 @@ MODELS=(
     "llama3.2:1b"          # Ultra yengil tezkorlik
 )
 
+# Railway PORT oralig'ida ishlash uchun OLLAMA_HOST ni set qilish
+export OLLAMA_HOST="0.0.0.0:${PORT:-11434}"
+
 # Ollama serverni foreground'da ishga tushirish — Railway healthcheck uchun muhim
 ollama serve &
 SERVER_PID=$!
