@@ -1,3 +1,5 @@
+/* ==================== NeuraAI frontend ==================== */
+
 const chat = document.getElementById("chat");
 const input = document.getElementById("input");
 const sendBtn = document.getElementById("sendBtn");
@@ -12,6 +14,11 @@ const convEmpty = document.getElementById("convEmpty");
 const newChatBtn = document.getElementById("newChatBtn");
 const sideUser = document.getElementById("sideUser");
 
+const landing = document.getElementById("landing");
+const chatApp = document.getElementById("chatApp");
+const modelSwitch = document.getElementById("modelSwitch");
+const modelStatus = document.getElementById("modelStatus");
+
 const authBackdrop = document.getElementById("authBackdrop");
 const modalClose = document.getElementById("modalClose");
 const modalTitle = document.getElementById("modalTitle");
@@ -19,13 +26,14 @@ const modalSub = document.getElementById("modalSub");
 const authForm = document.getElementById("authForm");
 const authError = document.getElementById("authError");
 const authSubmit = document.getElementById("authSubmit");
-const nameField = document.getElementById("nameField");
+const regFields = document.getElementById("regFields");
 const fName = document.getElementById("fName");
+const fSurname = document.getElementById("fSurname");
+const fEmail = document.getElementById("fEmail");
+const fPhone = document.getElementById("fPhone");
 const fUsername = document.getElementById("fUsername");
 const fPassword = document.getElementById("fPassword");
 
-const termsBackdrop = document.getElementById("termsBackdrop");
-const termsAccept = document.getElementById("termsAccept");
 const aboutBackdrop = document.getElementById("aboutBackdrop");
 const aboutClose = document.getElementById("aboutClose");
 const aboutBtn = document.getElementById("aboutBtn");
@@ -41,9 +49,10 @@ const loginTopBtn = document.getElementById("loginTopBtn");
 
 /* ================= holat ================= */
 
-let me = null;            // {token, username, name} | null
-let currentConv = null;   // ochiq suhbat id (null = yangi)
+let me = null;          // {token, username, name, surname, email, phone} | null
+let currentConv = null; // ochiq suhbat id (null = yangi)
 let sending = false;
+let currentModel = localStorage.getItem("neura_model") || "fast";
 
 function uid() {
   let id = localStorage.getItem("neura_uid");
@@ -62,8 +71,11 @@ function esc(t) {
 }
 
 function cacheUser(u) {
-  if (!u || u.guest) return;
-  localStorage.setItem("neura_user", JSON.stringify({ username: u.username, name: u.name }));
+  if (!u || !u.username) return;
+  localStorage.setItem(
+    "neura_user",
+    JSON.stringify({ username: u.username, name: u.name, surname: u.surname || "", email: u.email || "", phone: u.phone || "" })
+  );
 }
 function loadCachedUser() {
   try { return JSON.parse(localStorage.getItem("neura_user") || "null"); } catch (e) { return null; }
@@ -80,6 +92,11 @@ function fmtDate(iso) {
     return iso.slice(0, 10);
   }
 }
+
+const MODEL_LABELS = {
+  fast: "⚡ Tez model · gemini-flash-latest",
+  think: "🧠 Aqlli model · command-a-plus-05-2026",
+};
 
 /* ================= API ================= */
 
@@ -101,6 +118,35 @@ async function api(path, opts = {}) {
   return data;
 }
 
+/* ================= sahifa ko'rinishi ================= */
+
+function showLanding() {
+  landing.hidden = false;
+  chatApp.hidden = true;
+}
+function showChat() {
+  landing.hidden = true;
+  chatApp.hidden = false;
+  input.focus();
+}
+
+/* ================= model tanlash ================= */
+
+function applyModelUI() {
+  document.querySelectorAll(".ms-btn").forEach((b) =>
+    b.classList.toggle("active", b.dataset.model === currentModel)
+  );
+  if (modelStatus) modelStatus.textContent = MODEL_LABELS[currentModel] || "";
+  localStorage.setItem("neura_model", currentModel);
+}
+
+modelSwitch.addEventListener("click", (e) => {
+  const btn = e.target.closest(".ms-btn");
+  if (!btn || !btn.dataset.model) return;
+  currentModel = btn.dataset.model;
+  applyModelUI();
+});
+
 /* ================= xabarlar ================= */
 
 function renderText(text) {
@@ -111,6 +157,24 @@ function renderText(text) {
     else html += esc(p).replace(/\n/g, "<br>");
   });
   return html;
+}
+
+function qMessage(role, text) {
+  const row = document.createElement("div");
+  row.className = "row " + role;
+  if (role === "ai") {
+    const av = document.createElement("div");
+    av.className = "avatar";
+    av.textContent = "✦";
+    row.appendChild(av);
+  }
+  const b = document.createElement("div");
+  b.className = "bubble";
+  b.innerHTML = renderText(text);
+  row.appendChild(b);
+  chat.appendChild(row);
+  chat.scrollTop = chat.scrollHeight;
+  return row;
 }
 
 function qImage(row, role, url, caption) {
@@ -147,10 +211,8 @@ function qMedia(url, isVideo, caption) {
     v.controls = true;
     v.loop = true;
     v.muted = true;
-    v.autoplay = false;
     v.style.maxWidth = "100%";
     v.style.maxHeight = "300px";
-    v.style.borderRadius = "10px";
     b.appendChild(v);
   } else {
     const img = document.createElement("img");
@@ -168,24 +230,6 @@ function qMedia(url, isVideo, caption) {
   dl.download = "";
   dl.textContent = "⬇ Yuklab olish";
   b.appendChild(dl);
-  row.appendChild(b);
-  chat.appendChild(row);
-  chat.scrollTop = chat.scrollHeight;
-  return row;
-}
-
-function qMessage(role, text) {
-  const row = document.createElement("div");
-  row.className = "row " + role;
-  if (role === "ai") {
-    const av = document.createElement("div");
-    av.className = "avatar";
-    av.textContent = "✦";
-    row.appendChild(av);
-  }
-  const b = document.createElement("div");
-  b.className = "bubble";
-  b.innerHTML = renderText(text);
   row.appendChild(b);
   chat.appendChild(row);
   chat.scrollTop = chat.scrollHeight;
@@ -230,14 +274,14 @@ function addFeedback(row, messageId) {
 }
 
 function showWelcome() {
-  const name = me ? me.name : "";
+  const name = me ? (me.name || me.username) : "";
   chat.innerHTML = "";
   const w = document.createElement("div");
   w.className = "welcome";
   w.innerHTML =
     "<div class='welcome-logo'>✦</div>" +
-    "<h2>" + (name ? "Assalomu alaykum, <span class='accent'>" + esc(name) + "</span>!" : "Sizning aqlli<br><span class='accent'>yordamchingiz</span>") + "</h2>" +
-    "<p>Men suhbatlashib o'rganadigan sun'iy intellektman. Savol bering, kod yozang, rasm tahlil qiling yoki yangi rasm/video yarating.</p>";
+    "<h2>" + (name ? "Assalomu alaykum, <span class='grad-text'>" + esc(name) + "</span>!" : "Sizning aqlli<br><span class='grad-text'>yordamchingiz</span>") + "</h2>" +
+    "<p>Men suhbatlashib o'rganadigan sun'iy intellektman. Savol bering, kod yozing, rasm tahlil qiling yoki yangi rasm/video yarating.</p>";
   const grid = w.appendChild(document.createElement("div"));
   grid.className = "welcome-grid";
   const items = [
@@ -251,7 +295,7 @@ function showWelcome() {
   items.forEach((it) => {
     const card = document.createElement("button");
     card.className = "welcome-card";
-    card.innerHTML = "<span class='card-emoji'>" + it.e + "</span><b>" + it.t + "</b><small>" + it.d + "</small>";
+    card.innerHTML = "<span>" + it.e + "</span><b>" + it.t + "</b><small>" + it.d + "</small>";
     card.onclick = () => send(it.t === "Rasm tahlili" ? "Rasmni tahlil qil" : it.t === "Rasm yaratish" ? "Rasm yarat" : it.t === "Video yaratish" ? "Video yarat" : "Neura AI nima qila oladi?");
     grid.appendChild(card);
   });
@@ -264,6 +308,10 @@ function showWelcome() {
 async function send(text) {
   text = (text || "").trim();
   if (!text || sending) return;
+  if (!me) {
+    openAuth();
+    return;
+  }
   input.value = "";
   autoResize();
   sending = true;
@@ -274,7 +322,7 @@ async function send(text) {
   const typing = typingRow();
 
   try {
-    const body = { message: text, user_id: CLIENT_ID };
+    const body = { message: text, user_id: CLIENT_ID, model: currentModel };
     if (me) body.token = me.token;
     if (currentConv !== null) body.conversation_id = currentConv;
 
@@ -287,13 +335,11 @@ async function send(text) {
       currentConv = data.conversation_id;
       refreshConversations();
     }
-    if (data.user_name && !me) {
-      me = { token: localStorage.getItem("neura_token"), username: "", name: data.user_name };
-    }
   } catch (e) {
     typing.remove();
     if (e.status === 401) {
       qMessage("ai", "Kirish muddati tugagan. Qaytadan kiring.");
+      setTimeout(() => { logout(); openAuth(); }, 600);
     } else {
       qMessage("ai", "⚠️ Xatolik yuz berdi. Iltimos, qayta urinib ko'ring.");
     }
@@ -320,6 +366,7 @@ function formatAnalysis(d) {
 
 async function sendImage(file) {
   if (!file || sending) return;
+  if (!me) { openAuth(); return; }
   sending = true;
   sendBtn.disabled = true;
   hideChips();
@@ -350,6 +397,7 @@ async function sendImage(file) {
 
 async function genArt(kind) {
   if (sending) return;
+  if (!me) { openAuth(); return; }
   const q = prompt(kind === "image" ? "Rasm uchun tasvif yozing:" : "Video uchun tasvif yozing:", "tog'lar va quyosh botishi");
   if (!q || !q.trim()) return;
   sending = true;
@@ -382,7 +430,7 @@ async function genArt(kind) {
 /* ================= suhbatlar (tarix) ================= */
 
 async function refreshConversations() {
-  if (!me) return;
+  if (!me || !me.token) return;
   try {
     const data = await api("/api/conversations?token=" + encodeURIComponent(me.token));
     renderConvList(data.items);
@@ -430,18 +478,19 @@ function newChat() {
 
 /* ================= hisob ================= */
 
-function openAuth() {
+function openAuth(mode = "") {
+  if (mode) setMode(mode);
   authBackdrop.hidden = false;
-  fUsername.focus();
+  setTimeout(() => fUsername.focus(), 60);
 }
 function closeAuth() { authBackdrop.hidden = true; }
 
 function setMode(mode) {
   document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.mode === mode));
-  nameField.hidden = mode !== "register";
+  regFields.hidden = mode !== "register";
   authSubmit.textContent = mode === "register" ? "Ro'yxatdan o'tish" : "Kirish";
   modalTitle.textContent = mode === "register" ? "Hisob yarating" : "Xush kelibsiz!";
-  modalSub.textContent = mode === "register" ? "Suhbatlaringiz bir joyda saqlansin" : "Hisobingizga kiring";
+  modalSub.textContent = mode === "register" ? "AI ishlatish uchun 1 daqiqada ro'yxatdan o'ting" : "AI ishlatish uchun hisobingizga kiring";
 }
 
 authForm.onsubmit = async (e) => {
@@ -449,25 +498,54 @@ authForm.onsubmit = async (e) => {
   const mode = document.querySelector(".tab.active").dataset.mode;
   const username = fUsername.value.trim();
   const password = fPassword.value;
-  const name = fName.value.trim();
   authError.textContent = "";
   authSubmit.disabled = true;
 
   try {
-    const data = await api("/api/" + (mode === "register" ? "register" : "login"), {
-      method: "POST",
-      body: JSON.stringify({
-        username, password,
-        name: mode === "register" ? name : undefined,
-        client_id: CLIENT_ID,
-      }),
-    });
-    me = { token: data.token, username: data.username, name: data.name };
+    let data;
+    if (mode === "register") {
+      const email = fEmail.value.trim();
+      if (!email || !email.includes("@")) {
+        authError.textContent = "To'g'ri email kiriting (masalan: ism@mail.com)";
+        authSubmit.disabled = false;
+        return;
+      }
+      if (!fName.value.trim()) {
+        authError.textContent = "Ismingizni kiriting";
+        authSubmit.disabled = false;
+        return;
+      }
+      data = await api("/api/register", {
+        method: "POST",
+        body: JSON.stringify({
+          username, password,
+          name: fName.value.trim(),
+          surname: fSurname.value.trim(),
+          email,
+          phone: fPhone.value.trim(),
+          client_id: CLIENT_ID,
+        }),
+      });
+    } else {
+      data = await api("/api/login", {
+        method: "POST",
+        body: JSON.stringify({ username, password, client_id: CLIENT_ID }),
+      });
+    }
+    me = {
+      token: data.token,
+      username: data.username,
+      name: data.name,
+      surname: data.surname || "",
+      email: data.email || "",
+      phone: data.phone || "",
+    };
     localStorage.setItem("neura_token", data.token);
     cacheUser(me);
     closeAuth();
-    newChat();
     renderUser();
+    showChat();
+    newChat();
   } catch (err) {
     authError.textContent = err.message;
   }
@@ -480,30 +558,32 @@ function renderUser() {
     sideUser.innerHTML =
       '<button class="logout-btn" style="width:100%;padding:11px" id="loginPromptBtn">🔑 Hisobga kirish / Ro\'yxatdan o\'tish</button>';
     const b = document.getElementById("loginPromptBtn");
-    if (b) b.onclick = openAuth;
+    if (b) b.onclick = () => openAuth();
     return;
   }
   if (loginTopBtn) loginTopBtn.style.display = "none";
   const initial = (me.name || me.username || "?").charAt(0).toUpperCase();
   sideUser.innerHTML =
     '<div class="user-ava">' + esc(initial) + "</div>" +
-    '<div class="user-info"><div class="user-name">' + esc(me.name || me.username || "Mehmon") + '</div><div class="user-login">' + (me.guest ? "mehmon" : "@" + esc(me.username.toLowerCase())) + "</div></div>" +
-    '<button class="logout-btn" id="logoutBtn" title="Chiqish">' + (me.guest ? "Chiqish" : "Chiqish") + "</button>";
+    '<div class="user-info"><div class="user-name">' + esc(me.name || me.username || "") + '</div><div class="user-login">' + "@" + esc(me.username.toLowerCase()) + "</div></div>" +
+    '<button class="logout-btn" id="logoutBtn" title="Chiqish">Chiqish</button>';
   document.getElementById("logoutBtn").onclick = async () => {
     await api("/api/logout?token=" + encodeURIComponent(me.token)).catch(() => {});
-    me = null;
-    currentConv = null;
-    localStorage.removeItem("neura_token");
-    removeCachedUser();
-    chat.innerHTML = "";
-    renderUser();
-    showWelcome();
-    refreshConversations();
-    if (loginTopBtn) loginTopBtn.style.display = "";
+    logout();
   };
 }
 
-/* ================= API kaliti / Haqida / Qoidalar ================= */
+function logout() {
+  me = null;
+  currentConv = null;
+  localStorage.removeItem("neura_token");
+  removeCachedUser();
+  renderUser();
+  showLanding();
+  if (loginTopBtn) loginTopBtn.style.display = "";
+}
+
+/* ================= API kaliti / Haqida ================= */
 
 function openAbout() {
   if (aboutBtn) aboutBackdrop.hidden = false;
@@ -511,7 +591,6 @@ function openAbout() {
 
 async function openKeyModal() {
   if (!me) {
-    authError.textContent = "";
     openAuth();
     return;
   }
@@ -566,6 +645,21 @@ keyRevokeBtn.onclick = async () => {
   }
 };
 
+/* ================= landing interaktiv ================= */
+
+document.getElementById("landingLoginBtn").onclick = () => openAuth();
+document.getElementById("heroStartBtn").onclick = () => openAuth("register");
+document.getElementById("heroHowBtn").onclick = () => {
+  document.getElementById("features").scrollIntoView({ behavior: "smooth" });
+};
+document.getElementById("supportChatBtn").onclick = () => openAuth();
+document.getElementById("cliHowBtn").onclick = () => {
+  document.getElementById("cliBox").hidden = !document.getElementById("cliBox").hidden;
+};
+document.querySelectorAll("[data-open-chat]").forEach((el) => {
+  el.onclick = () => openAuth();
+});
+
 /* ================= boshqa ================= */
 
 function hideChips() { chipsBox.style.display = "none"; }
@@ -611,64 +705,60 @@ modalClose.onclick = closeAuth;
 authBackdrop.addEventListener("click", (e) => { if (e.target === authBackdrop) closeAuth(); });
 document.querySelectorAll(".tab").forEach((t) => t.addEventListener("click", () => setMode(t.dataset.mode)));
 
-loginTopBtn.onclick = openAuth;
+loginTopBtn.onclick = () => openAuth();
 aboutBtn.onclick = openAbout;
 aboutClose.onclick = () => { aboutBackdrop.hidden = true; };
 aboutBackdrop.addEventListener("click", (e) => { if (e.target === aboutBackdrop) aboutBackdrop.hidden = true; });
 keyBtn.onclick = openKeyModal;
 keyClose.onclick = () => { keyBackdrop.hidden = true; };
 keyBackdrop.addEventListener("click", (e) => { if (e.target === keyBackdrop) keyBackdrop.hidden = true; });
-termsBackdrop.addEventListener("click", (e) => { if (e.target === termsBackdrop) termsBackdrop.hidden = true; });
 
 /* ================= boshlash ================= */
 
 async function boot() {
-  if (!localStorage.getItem("neura_terms")) {
-    termsBackdrop.hidden = false;
-  }
-  termsAccept.onclick = () => {
-    localStorage.setItem("neura_terms", "1");
-    termsBackdrop.hidden = true;
-  };
-
   const token = localStorage.getItem("neura_token");
   const cachedUser = loadCachedUser();
-  let authFail = false;
+
   if (token) {
     try {
       const u = await api("/api/me?token=" + encodeURIComponent(token));
-      me = { token, username: u.username, name: u.name };
+      me = {
+        token,
+        username: u.username,
+        name: u.name,
+        surname: u.surname || "",
+        email: u.email || "",
+        phone: u.phone || "",
+      };
       cacheUser(me);
-      currentConv = null;
       renderUser();
+      showChat();
+      currentConv = null;
       await refreshConversations();
     } catch (e) {
       if (e.status === 401) {
+        // Token haqiqatan ham o'lik — tozalaymiz
         localStorage.removeItem("neura_token");
         removeCachedUser();
         me = null;
-        authFail = true;
-      } else {
-        me = cachedUser
-          ? { token, username: cachedUser.username, name: cachedUser.name, offline: true }
-          : null;
+      } else if (cachedUser) {
+        // Server xatosi / tarmoq uzilishi — foydalanuvchini o'chiramaymiz!
+        me = { token, username: cachedUser.username, name: cachedUser.name, offline: true };
         renderUser();
+        showChat();
+      } else {
+        me = null;
       }
     }
   }
-  if (!me && !authFail) {
-    try {
-      const s = await api("/api/session?client_id=" + encodeURIComponent(CLIENT_ID));
-      me = { token: s.token, username: "", name: "", guest: true };
-      localStorage.setItem("neura_token", s.token);
-      renderUser();
-      await refreshConversations();
-    } catch (e) {
-      renderUser();
-    }
-  } else {
+
+  if (!me) {
+    // Ro'yxatdan o'tmagan — landing, AI faqat ro'yxatdan o'tganlarga
     renderUser();
+    showLanding();
+    return;
   }
+  renderUser();
   if (!currentConv) showWelcome();
 }
 
@@ -683,15 +773,18 @@ const installBtn = document.getElementById("installBtn");
 window.addEventListener("beforeinstallprompt", (e) => {
   e.preventDefault();
   deferredPrompt = e;
-  installBtn.hidden = false;
+  if (installBtn) installBtn.hidden = false;
 });
-installBtn.addEventListener("click", async () => {
-  if (!deferredPrompt) return;
-  deferredPrompt.prompt();
-  await deferredPrompt.userChoice;
-  deferredPrompt = null;
-  installBtn.hidden = true;
-});
-window.addEventListener("appinstalled", () => { installBtn.hidden = true; });
+if (installBtn) {
+  installBtn.addEventListener("click", async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    await deferredPrompt.userChoice;
+    deferredPrompt = null;
+    installBtn.hidden = true;
+  });
+}
+window.addEventListener("appinstalled", () => { if (installBtn) installBtn.hidden = true; });
 
+applyModelUI();
 boot();

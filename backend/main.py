@@ -69,6 +69,7 @@ class ChatRequest(BaseModel):
     token: str | None = None
     conversation_id: int | None = None
     api_key: str | None = None
+    model: str | None = None  # "fast" | "think" | aniq model nomi
 
 
 class FeedbackRequest(BaseModel):
@@ -86,6 +87,9 @@ class RegisterRequest(BaseModel):
     username: str
     password: str
     name: str = ""
+    surname: str = ""
+    email: str = ""
+    phone: str = ""
     client_id: str | None = None
 
 
@@ -333,7 +337,17 @@ def chat(req: ChatRequest) -> JSONResponse:
     except Exception:
         history = None
 
-    reply, source = brain.answer(req.message, db.get_knowledge(), history=history)
+    # Model tanlash: "fast" → NEURA_FAST_MODEL (tez), "think" → NEURA_THINK_MODEL (mulohazali)
+    model_name = None
+    if req.model in ("fast", "think"):
+        key = "NEURA_FAST_MODEL" if req.model == "fast" else "NEURA_THINK_MODEL"
+        model_name = os.environ.get(key, "").strip() or None
+    elif req.model:
+        model_name = req.model.strip() or None
+
+    reply, source = brain.answer(
+        req.message, db.get_knowledge(), history=history, model=model_name
+    )
     reply = (
         reply
         or "Kechirasiz, javob tayyorlay olmadim. Savolingizni boshqacha yozib ko'ring."
@@ -350,6 +364,7 @@ def chat(req: ChatRequest) -> JSONResponse:
         "source": source,
         "message_id": msg_id,
         "conversation_id": conv_id,
+        "model": model_name,
     }
     if user and user.get("name"):
         resp["user_name"] = user["name"]
@@ -665,15 +680,29 @@ def register(req: RegisterRequest) -> JSONResponse:
         return JSONResponse(
             {"error": "parol kamida 4 belgi bo'lishi kerak"}, status_code=400
         )
+    if "@" not in req.email or "." not in req.email:
+        return JSONResponse(
+            {"error": "to'g'ri email kiriting (masalan: ism@mail.com)"}, status_code=400
+        )
+    if req.phone and not req.phone.replace("+", "").replace(" ", "").isdigit():
+        return JSONResponse(
+            {"error": "telefon raqam to'g'ri emas (masalan: +998901234567)"},
+            status_code=400,
+        )
+    if not req.name.strip():
+        return JSONResponse({"error": "ismingizni kiriting"}, status_code=400)
     user_id = db.register_user(
         req.username,
         req.password and hash_password(req.password),
         req.name,
+        req.surname or "",
+        req.email or "",
+        req.phone or "",
         req.client_id,
     )
     if user_id is None:
         return JSONResponse(
-            {"error": "bu login band, boshqasini tanlang"}, status_code=409
+            {"error": "bu login yoki email band — boshqasini tanlang"}, status_code=409
         )
     token = new_token()
     db.set_token(user_id, token)
@@ -684,6 +713,9 @@ def register(req: RegisterRequest) -> JSONResponse:
             "token": token,
             "username": user["username"],
             "name": user["name"] or user["username"],
+            "surname": user.get("surname") or "",
+            "email": user.get("email") or "",
+            "phone": user.get("phone") or "",
         }
     )
 
@@ -722,6 +754,9 @@ def me(token: str = "") -> JSONResponse:
             "id": user["id"],
             "username": user["username"],
             "name": user["name"] or user["username"],
+            "surname": user.get("surname") or "",
+            "email": user.get("email") or "",
+            "phone": user.get("phone") or "",
         }
     )
 

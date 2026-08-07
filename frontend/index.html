@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="theme-color" content="#0f1020" />
+  <meta name="theme-color" content="#05060f" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -15,14 +15,173 @@
   <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body>
-  <div class="bg-orbs" aria-hidden="true">
-    <span class="orb orb-1"></span>
-    <span class="orb orb-2"></span>
-    <span class="orb orb-3"></span>
+  <div class="aurora" aria-hidden="true">
+    <span class="orb o1"></span>
+    <span class="orb o2"></span>
+    <span class="orb o3"></span>
+    <span class="grid-line"></span>
   </div>
 
-  <div class="layout">
-    <!-- ============ SIDEBAR ============ -->
+  <!-- ===================== LANDING (ro'yxatdan o'tmaganlar) ===================== -->
+  <div class="landing" id="landing" hidden>
+    <nav class="l-nav">
+      <div class="l-brand">
+        <div class="logo-badge">
+          <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9 17 7M7 17l-2.1 2.1"></path>
+          </svg>
+        </div>
+        <span>Neura<span class="accent">AI</span></span>
+      </div>
+      <div class="l-links">
+        <a href="#features">Imkoniyatlar</a>
+        <a href="#models">Modellar</a>
+        <a href="#install">O'rnatish</a>
+        <a href="#founders">Asoschi</a>
+        <a href="#support">Yordam</a>
+      </div>
+      <button class="l-cta" id="landingLoginBtn">Kirish / Ro'yxatdan o'tish</button>
+    </nav>
+
+    <header class="hero">
+      <div class="hero-badge"><span class="pulse-dot"></span> O'zbek tilidagi zamonaviy AI yordamchi</div>
+      <h1>Sun'iy intellekt bilan<br /><span class="grad-text">ishonchli va aqlli</span> suhbat</h1>
+      <p class="hero-sub">NeuraAI — matn, kod, rasm va video yaratadi. Ikkita kuchli model: tez va chuqur mulohazali. Veb, Telegram, terminal va Android ilovada.</p>
+      <div class="hero-cta">
+        <button class="btn-primary" id="heroStartBtn">🚀 Bepul boshlash</button>
+        <button class="btn-ghost" id="heroHowBtn">Qanday ishlaydi?</button>
+      </div>
+      <div class="hero-stats">
+        <div><b>2</b><span>model</span></div>
+        <div><b>4</b><span>platforma</span></div>
+        <div><b>24/7</b><span>onlayn</span></div>
+      </div>
+    </header>
+
+    <section class="section" id="features">
+      <h2 class="sec-title">Nima <span class="accent">qila oladi</span>?</h2>
+      <div class="feat-cards">
+        <div class="f-card"><div class="f-ico">💬</div><h3>Suhbat</h3><p>Har qanday savolga tabiiy, o'zbek tilida javob beradi.</p></div>
+        <div class="f-card"><div class="f-ico">💻</div><h3>Kod yozish</h3><p>Python, JS, SQL, HTML va boshqa tillarda kod yaratadi.</p></div>
+        <div class="f-card"><div class="f-ico">🌍</div><h3>Internet qidiruvi</h3><p>Yangiliklar va faktlarni onlayn izlab topadi.</p></div>
+        <div class="f-card"><div class="f-ico">📷</div><h3>Rasm tahlili</h3><p>Yuborgan rasmingizni ko'rib, izohlab beradi.</p></div>
+        <div class="f-card"><div class="f-ico">🎨</div><h3>Rasm yaratish</h3><p>Ta'rifingiz bo'yicha haqiqiy AI rasmini chizadi.</p></div>
+        <div class="f-card"><div class="f-ico">🎬</div><h3>Video yaratish</h3><p>Matndan qisqa video tayyorlaydi.</p></div>
+        <div class="f-card"><div class="f-ico">🎵</div><h3>Musiqa / Ovoz</h3><p>Qo'shiq yaratadi va matnni ovozga aylantiradi.</p></div>
+        <div class="f-card"><div class="f-ico">🔑</div><h3>Bepul API</h3><p>Dasturlaringizga 20 so'rov/daqiga limiti bilan ulang.</p></div>
+      </div>
+    </section>
+
+    <section class="section" id="models">
+      <h2 class="sec-title">Ikkita <span class="accent">kuchli model</span></h2>
+      <p class="sec-sub">Suhbatda istalgan payt modelni almashtiring.</p>
+      <div class="model-cards">
+        <div class="m-card fast">
+          <div class="m-head"><span class="m-emoji">⚡</span><h3>Tez model</h3><span class="m-tag">1–3 soniya</span></div>
+          <p class="m-desc">Oddiy savollar, tarjima, matn tayyorlash — darhol javob beradi.</p>
+          <ul>
+            <li>Gemini Flash — jahon darajasidagi tezlik</li>
+            <li>Kundalik suhbatlar uchun ideal</li>
+            <li>Bepul va cheksiz</li>
+          </ul>
+        </div>
+        <div class="m-card think">
+          <div class="m-head"><span class="m-emoji">🧠</span><h3>Aqlli model</h3><span class="m-tag">5–6 soniya</span></div>
+          <p class="m-desc">Murakkab masalalar, tahlil va chuqur mulohaza — aniq, xatosiz javob.</p>
+          <ul>
+            <li>Cohere Command A+ — kuchli fikrlash</li>
+            <li>Mantiq, matematika, yozma ishlar</li>
+            <li>Katta kontekst (436K token)</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="install">
+      <h2 class="sec-title">Qanday <span class="accent">ishlatiladi</span>?</h2>
+      <div class="plat-grid">
+        <div class="plat">
+          <div class="p-ico">🌐</div>
+          <h3>Veb sayt</h3>
+          <p>Bu sahifada — kirib suhbatlashish kifoya.</p>
+          <button class="btn-ghost sm" data-open-chat="1">Chatni ochish →</button>
+        </div>
+        <div class="plat">
+          <div class="p-ico">🤖</div>
+          <h3>Telegram bot</h3>
+          <p>@NeuraAI_UzBot — telefonda ham AI qo'lingizda.</p>
+          <a class="btn-ghost sm" href="https://t.me/NeuraAI_UzBot" target="_blank" rel="noopener">Botga o'tish →</a>
+        </div>
+        <div class="plat">
+          <div class="p-ico">📱</div>
+          <h3>Android ilova</h3>
+          <p>To'g'ridan-to'g'ri APK yuklab oling — GitHub'siz.</p>
+          <a class="btn-ghost sm" href="/apk/neuraai.apk" download>APK yuklab olish →</a>
+        </div>
+        <div class="plat">
+          <div class="p-ico">⌨️</div>
+          <h3>Terminal (CLI)</h3>
+          <p>Dasturchilar uchun — kompyuter terminalida ishlang.</p>
+          <button class="btn-ghost sm" id="cliHowBtn">Ko'rsatma →</button>
+        </div>
+      </div>
+      <div class="cli-box" id="cliBox" hidden>
+        <div class="cli-head"><span class="cli-dot r"></span><span class="cli-dot y"></span><span class="cli-dot g"></span> terminal</div>
+        <pre><code>$ git clone https://github.com/zettacodetech/neuraai
+$ cd neuraai/backend
+$ python -m venv venv && source venv/bin/activate
+$ pip install -r requirements.txt
+
+# Bir martalik savol:
+$ python cli.py "O'zbekiston haqida gapir"
+# Interaktiv suhbat:
+$ python cli.py --chat
+# Modelni tanlash:  --model fast | think
+$ python cli.py --model think --chat
+# Rasm yaratish / tahlil / video:
+$ python cli.py --gen-image "kosmos"
+$ python cli.py --image rasm.jpg
+$ python cli.py --gen-video "panorama"</code></pre>
+      </div>
+    </section>
+
+    <section class="section" id="founders">
+      <h2 class="sec-title">Asoschi</h2>
+      <div class="founder-card">
+        <div class="founder-ava">I</div>
+        <div>
+          <h3>Inomjon</h3>
+          <p class="muted">NeuraAI asoschisi va bosh dasturchisi. AI — noldan, o'zbek tili va foydalanuvchilar uchun qurilgan. Har bir suhbatda yaxshilanib boradi.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="support">
+      <h2 class="sec-title">Yordam va <span class="accent">qo'llab-quvvatlash</span></h2>
+      <div class="support-cards">
+        <a class="s-card" href="https://t.me/NeuraAI_UzBot" target="_blank" rel="noopener">
+          <div class="s-ico">💬</div><h3>Telegram bot</h3><p>Istalgan savol — botga yozing</p>
+        </a>
+        <a class="s-card" href="/static/apk/neuraai.apk" download>
+          <div class="s-ico">📱</div><h3>Ilova</h3><p>Android uchun APK</p>
+        </a>
+        <button class="s-card" id="supportChatBtn">
+          <div class="s-ico">🌐</div><h3>Saytda chat</h3><p>Kirib, to'g'ridan-to'g'ri suhbat</p>
+        </button>
+      </div>
+    </section>
+
+    <footer class="l-footer">
+      <div class="logo-badge">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9 17 7M7 17l-2.1 2.1"></path></svg>
+      </div>
+      <p>NeuraAI © 2026 — Inomjon tomonidan sevgi bilan qurilgan</p>
+    </footer>
+  </div>
+
+  <!-- ===================== CHAT (ro'yxatdan o'tganlar) ===================== -->
+  <div class="layout" id="chatApp" hidden>
     <aside class="sidebar glass" id="sidebar">
       <div class="side-brand">
         <div class="logo-badge">
@@ -44,7 +203,7 @@
         <div class="conv-empty" id="convEmpty">Hali suhbatlar yo'q.<br>Birinchi savolingizni yozing!</div>
       </div>
 
-      <a class="install-btn" href="https://github.com/zettacodetech/neuraai/releases/latest/download/neuraai.apk" download id="apkSideLink" target="_blank" rel="noopener">
+      <a class="install-btn" href="/apk/neuraai.apk" download id="apkSideLink">
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
         Android ilovani yuklab olish
       </a>
@@ -53,7 +212,6 @@
     </aside>
     <div class="overlay" id="overlay"></div>
 
-    <!-- ============ ASOSIY ============ -->
     <div class="main">
       <header class="header glass">
         <button class="hamburger" id="menuBtn" aria-label="Menyu">
@@ -62,12 +220,16 @@
         <div class="brand">
           <div class="brand-text">
             <h1>Neura<span class="accent">AI</span></h1>
-            <p>Noldan qurilgan, suhbatlashib o'rganadi</p>
+            <p id="modelStatus">⚡ Tez model · gemini-flash-latest</p>
           </div>
         </div>
         <div class="header-actions">
           <div class="status"><span class="dot"></span> Onlayn</div>
-          <a class="head-btn" href="https://github.com/zettacodetech/neuraai/releases/latest/download/neuraai.apk" download id="apkBtn" title="Android APK" target="_blank" rel="noopener">
+          <div class="model-switch" id="modelSwitch" title="Modelni tanlash">
+            <button class="ms-btn active" data-model="fast">⚡ Tez</button>
+            <button class="ms-btn" data-model="think">🧠 Aqlli</button>
+          </div>
+          <a class="head-btn" href="/apk/neuraai.apk" download id="apkBtn" title="Android APK">
             <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
             <span>APK</span>
           </a>
@@ -112,8 +274,8 @@
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
       </button>
       <div class="modal-logo">✦</div>
-      <h2 id="modalTitle">NeuraAI ga xush kelibsiz!</h2>
-      <p class="modal-sub" id="modalSub">Suhbatlaringiz saqlansin — hisob yarating</p>
+      <h2 id="modalTitle">Xush kelibsiz!</h2>
+      <p class="modal-sub" id="modalSub">AI ishlatish uchun kirish talab qilinadi</p>
 
       <div class="tabs">
         <button class="tab active" data-mode="login">Kirish</button>
@@ -121,39 +283,35 @@
       </div>
 
       <form id="authForm" autocomplete="off">
-        <div class="field" id="nameField" hidden>
-          <label for="fName">Ismingiz</label>
-          <input id="fName" type="text" placeholder="Misol: Alisher" />
+        <div class="reg-fields" id="regFields" hidden>
+          <div class="field">
+            <label for="fName">Ismingiz *</label>
+            <input id="fName" type="text" placeholder="Misol: Alisher" required />
+          </div>
+          <div class="field">
+            <label for="fSurname">Familyangiz</label>
+            <input id="fSurname" type="text" placeholder="Misol: Navoiy" />
+          </div>
+          <div class="field">
+            <label for="fEmail">Email *</label>
+            <input id="fEmail" type="email" placeholder="ism@mail.com" required />
+          </div>
+          <div class="field">
+            <label for="fPhone">Telefon raqam</label>
+            <input id="fPhone" type="tel" placeholder="+998 90 123 45 67" />
+          </div>
         </div>
         <div class="field">
-          <label for="fUsername">Login</label>
-          <input id="fUsername" type="text" placeholder="login" autocomplete="username" />
+          <label for="fUsername">Login *</label>
+          <input id="fUsername" type="text" placeholder="login" autocomplete="username" required />
         </div>
         <div class="field">
-          <label for="fPassword">Parol</label>
-          <input id="fPassword" type="password" placeholder="••••••" autocomplete="current-password" />
+          <label for="fPassword">Parol *</label>
+          <input id="fPassword" type="password" placeholder="••••••" autocomplete="current-password" required />
         </div>
         <p class="form-error" id="authError"></p>
         <button type="submit" class="auth-submit" id="authSubmit">Kirish</button>
       </form>
-    </div>
-  </div>
-
-  <!-- ============ QOIDALAR (onboarding) ============ -->
-  <div class="modal-backdrop" id="termsBackdrop" hidden>
-    <div class="modal modal-lg glass">
-      <div class="modal-logo">✦</div>
-      <h2>Neura<span class="accent">AI</span> ga xush kelibsiz!</h2>
-      <p class="modal-sub">Suhbatlashishdan oldin quyidagi qoidalar bilan tanishib chiqing</p>
-      <div class="terms-list">
-        <div class="term-item"><span class="term-num">1</span><p><b>Maqsad.</b> NeuraAI — o'zbek tilidagi sun'iy intellekt yordamchisi. Suhbatlashadi, rasm tahlil qiladi va rasm/video yaratadi.</p></div>
-        <div class="term-item"><span class="term-num">2</span><p><b>Xatoliklar.</b> AI javoblari hozircha har doim to'g'ri bo'lmasligi mumkin. Muhim ma'lumotni (tibbiyot, moliya, dori, qonun) doim tekshirib oling.</p></div>
-        <div class="term-item"><span class="term-num">3</span><p><b>Boshqa foydalanish.</b> NeuraAI dan noqonuniy, zararli yoki boshqa odamlarga zarar yetkazadigan so'rovlar uchun foydalanmang.</p></div>
-        <div class="term-item"><span class="term-num">4</span><p><b>Ma'lumotlar.</b> Suhbatlar ta'lim maqsadida AI'ni takomillashtirish uchun ishlatilishi mumkin. Nozik shaxsiy ma'lumotlarni yozmang.</p></div>
-        <div class="term-item"><span class="term-num">5</span><p><b>API kaliti.</b> Dasturlash uchun API kaliti <b>bepul</b> — faqat daqiqasiga 20 so'rovgacha limitu cheklangan.</p></div>
-        <div class="term-item"><span class="term-num">6</span><p><b>Android ilova.</b> Rasmiy APK'ni yuqoridagi "APK" tugmasi orqali yuklab oling. Boshqa manbalardan ilovalardan ehtiyot bo'ling.</p></div>
-      </div>
-      <button class="auth-submit" id="termsAccept">Tushundim, suhbatlashishni boshlash</button>
     </div>
   </div>
 
@@ -166,16 +324,15 @@
       <div class="modal-logo">✦</div>
       <h2>Neura<span class="accent">AI</span> haqida</h2>
       <div class="about-body">
-        <p><b>NeuraAI</b> — noldan qurilgan, o'zbek tilida sichraydigan sun'iy intellekt yordamchisi. Har suhbatda odamalr ganovrig urnagan ma'lumotlarini o'rganib boradi.</p>
+        <p><b>NeuraAI</b> — o'zbek tilida qurilgan zamonaviy sun'iy intellekt yordamchisi. Suhbat, kod, rasm/video generatsiya va internet qidiruvini birlashtiradi. Foydalanuvchilar bilan har suhbatda yaxshilanadi.</p>
         <div class="feat-grid">
+          <div class="feat"><b>⚡ Tez model</b><span>Gemini Flash — 1–3 soniyada javob</span></div>
+          <div class="feat"><b>🧠 Aqlli model</b><span>Cohere Command A+ — chuqur mulohaza</span></div>
           <div class="feat"><b>💬 Suhbat</b><span>Savollarga tabiiy javob beradi</span></div>
           <div class="feat"><b>💻 Kod</b><span>Dasturlash kodlari yozadi</span></div>
-          <div class="feat"><b>🌍 Qidiruv</b><span>Internetdan yangi ma'lumot topadi</span></div>
-          <div class="feat"><b>📷 Rasm tahlili</b><span>Rasmni tahlil qiladı</span></div>
-          <div class="feat"><b>🎨 Rasm/Video</b><span>Kir yozganingizga qarab yaratadi</span></div>
-          <div class="feat"><b>🔑 API</b><span>Bepul API kalit — dasturlaringizga qo'shvering</span></div>
+          <div class="feat"><b>🎨 Rasm/Video</b><span>Prompt bo'yicha yaratadi</span></div>
+          <div class="feat"><b>🤖 Bot + CLI + Ilova</b><span>Har qanday qurilmada</span></div>
         </div>
-        <p class="modal-sub">Savollaringiz bormi? Shunchaki chatga yozing — NeuraAI'ga hamma narsani soalishingiz mumkin!</p>
       </div>
     </div>
   </div>
@@ -188,7 +345,7 @@
       </button>
       <div class="modal-logo">🔑</div>
       <h2>API kaliti</h2>
-      <p class="modal-sub">Kalit <b>mutlaqo bepul</b>. Server yuklanishi oldini olish uchun limit: <b>20 so'rov / daqiqa</b>.</p>
+      <p class="modal-sub">Kalit <b>mutlaqo bepul</b>. Limit: <b>20 so'rov / daqiqa</b>.</p>
       <div class="api-key-box" id="apiKeyBox">
         <span class="muted">Sizda hozircha kalit yo'q. Yaratib oling.</span>
       </div>
@@ -199,7 +356,7 @@
         <button class="ghost-btn danger" id="keyRevokeBtn" hidden>Bekor qilish</button>
       </div>
       <div class="api-howto">
-        <b>Dastulangizda foydalanish:</b>
+        <b>Dasturingizda foydalanish:</b>
         <pre>curl -X POST https://neuraai.up.railway.app/api/chat \
   -H "Content-Type: application/json" \
   -d '{"message":"Salom","api_key":"YOUR_KEY"}'</pre>

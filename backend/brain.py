@@ -235,6 +235,7 @@ class Brain:
         message: str,
         knowledge: list[dict],
         history: list[dict] | None = None,
+        model: str | None = None,
     ) -> tuple[str, str]:
         """(javob, source) — source: intent | code | knowledge | websearch | llm | fallback"""
         intent = self._detect_intent(message)
@@ -273,13 +274,15 @@ class Brain:
         if os.environ.get("ENABLE_WEB_SEARCH", "1") == "1" and len(message) >= 10:
             web_answer, context = self._web_search(message)
             if context:
-                llm_reply = self._llm(message, context=context, history=history)
+                llm_reply = self._llm(
+                    message, context=context, history=history, model=model
+                )
                 if llm_reply:
                     return llm_reply, "llm"
             if web_answer:
                 return web_answer, "websearch"
 
-        llm_reply = self._llm(message, history=history)
+        llm_reply = self._llm(message, history=history, model=model)
         if llm_reply:
             return llm_reply, "llm"
         return self._fallback(message), "fallback"
@@ -309,12 +312,13 @@ class Brain:
         message: str,
         context: str | None = None,
         history: list[dict] | None = None,
+        model: str | None = None,
     ) -> str | None:
         try:
             from llm import llm_answer
         except ImportError:
             return None
-        return llm_answer(message, history=history, context=context)
+        return llm_answer(message, history=history, context=context, model=model)
 
     def _retrieve(
         self, q_tokens: list[str], knowledge: list[dict]

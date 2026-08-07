@@ -21,6 +21,9 @@ CREATE TABLE IF NOT EXISTS users (
     username      TEXT UNIQUE,
     password_hash TEXT,
     name          TEXT,
+    surname       TEXT,
+    email         TEXT,
+    phone         TEXT,
     token         TEXT,
     created_at    TEXT DEFAULT (datetime('now'))
 );
@@ -78,6 +81,9 @@ _PG_DDL = [
         username      TEXT UNIQUE,
         password_hash TEXT,
         name          TEXT,
+        surname       TEXT,
+        email         TEXT,
+        phone         TEXT,
         token         TEXT,
         created_at    TIMESTAMPTZ DEFAULT now()
     )
@@ -218,7 +224,15 @@ class Database:
             return
         with self._lock:
             user_cols = [r[1] for r in self.conn.execute("PRAGMA table_info(users)")]
-            for col in ("username", "password_hash", "name", "token"):
+            for col in (
+                "username",
+                "password_hash",
+                "name",
+                "surname",
+                "email",
+                "phone",
+                "token",
+            ):
                 if col not in user_cols:
                     self.conn.execute(f"ALTER TABLE users ADD COLUMN {col} TEXT")
             msg_cols = [r[1] for r in self.conn.execute("PRAGMA table_info(messages)")]
@@ -268,14 +282,16 @@ class Database:
 
     def get_user(self, user_id: int) -> dict | None:
         row = self._row(
-            "SELECT id, username, name, token, client_id FROM users WHERE id = ?",
+            "SELECT id, username, name, surname, email, phone, token, client_id "
+            "FROM users WHERE id = ?",
             (user_id,),
         )
         return dict(row) if row else None
 
     def get_user_by_token(self, token: str) -> dict | None:
         row = self._row(
-            "SELECT id, username, name, token, client_id FROM users WHERE token = ?",
+            "SELECT id, username, name, surname, email, phone, token, client_id "
+            "FROM users WHERE token = ?",
             (token,),
         )
         return dict(row) if row else None
@@ -289,6 +305,9 @@ class Database:
         username: str,
         password_hash: str,
         name: str = "",
+        surname: str = "",
+        email: str = "",
+        phone: str = "",
         client_id: str | None = None,
     ) -> int | None:
         username = username.strip().lower()
@@ -298,9 +317,23 @@ class Database:
             exists = self._row("SELECT id FROM users WHERE username = ?", (username,))
             if exists:
                 return None
+            if email:
+                dup_email = self._row(
+                    "SELECT id FROM users WHERE email = ?", (email.strip().lower(),)
+                )
+                if dup_email:
+                    return None
             new_id = self._insert(
-                "INSERT INTO users (username, password_hash, name) VALUES (?, ?, ?)",
-                (username, password_hash, name or username),
+                "INSERT INTO users (username, password_hash, name, surname, email, phone) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    username,
+                    password_hash,
+                    name or username,
+                    surname,
+                    email.strip().lower(),
+                    phone,
+                ),
             )
             if client_id:
                 guest = self._row(

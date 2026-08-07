@@ -313,20 +313,46 @@ def llm_chat(
     *,
     temperature: float = 0.4,
     max_tokens: int = 600,
+    model: str | None = None,
 ) -> str | None:
-    """Providerlar bo'ylab zanjir — xatoda keyingi prov qiladi, bari yiqilsa None."""
+    """Providerlar bo'ylab zanjir — xatoda keyingi prov qiladi, bari yiqilsa None.
+
+    `model` berilsa — o'sha model nomiga mos providerlar birinchi saraladi
+    va har bir so'rovda model nomi ishlatiladi (mos provider javob beradi,
+    mos kelmagani tezda 400/404 berib o'tib ketadi).
+    """
     if not LLM_PROVIDERS:
         return None
+    chain = LLM_PROVIDERS
+    if model:
+        resolved = model.strip().split(":")[-1].lstrip("~/")
+        d = model.strip().lstrip("~/")
+
+        def _rank(p):
+            pm = getattr(p, "model", "") or ""
+            pm = pm.strip().lstrip("~/")
+            if pm == d or pm.endswith(d) or d.endswith(pm) or resolved in pm:
+                return 0
+            return 1
+
+        chain = sorted(chain, key=_rank)
     last_error: Exception | None = None
-    for provider in LLM_PROVIDERS:
+    for provider in chain:
         if not provider.available:
             continue
         try:
             if hasattr(provider, "chat") and callable(provider.chat):
                 # Ollama / Gemini / DDG — o'z API formatiga ega
-                content = provider.chat(
-                    messages, temperature=temperature, max_tokens=max_tokens
-                )
+                saved_model = getattr(provider, "model", None)
+                if model:
+                    provider.model = model  # type: ignore[attr-defined]
+                try:
+                    content = provider.chat(
+                        messages, temperature=temperature, max_tokens=max_tokens
+                    )
+                finally:
+                    if saved_model is not None:
+                        provider.model = saved_model  # type: ignore[attr-defined]
             else:
                 # OpenAI-compatible /chat/completions
                 limit = (
@@ -336,7 +362,7 @@ def llm_chat(
                 )
                 body = json.dumps(
                     {
-                        "model": provider.model,
+                        "model": model or provider.model,
                         "messages": messages,
                         "temperature": temperature,
                         "max_completion_tokens": limit,
@@ -368,6 +394,7 @@ def llm_answer(
     message: str,
     history: list[dict] | None = None,
     context: str | None = None,
+    model: str | None = None,
 ) -> str | None:
     """Foydalanuvchi savoliga LLM javobi — tarix va internet konteksti bilan."""
     if not llm_available():
@@ -380,13 +407,14 @@ def llm_answer(
     if context:
         system += (
             "\n\nInternetdan topilgan ma'lumotlar (javobda aynan shulardan foydalaning, "
-            "manbani keltirmasdan):\n" + context
+            "izlab berilgan manbalarga tayanib) — javobni xuddi shu ma'lumotga ko'ra:\n"
+            + context
         )
     messages = [{"role": "system", "content": system}]
     if history:
         messages.extend(history[-6:])
     messages.append({"role": "user", "content": message})
-    return llm_chat(messages)
+    return llm_chat(messages, model=model)
 
 
 __all__ = ["llm_available", "llm_chat", "llm_answer"]
