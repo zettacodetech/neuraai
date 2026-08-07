@@ -40,14 +40,21 @@ const C = {
   bg: '#060a14',
   surface: '#0d1526',
   surface2: '#111b30',
+  surface3: '#162139',
   border: '#1c2a45',
   text: '#eaf0fb',
   muted: '#8b98b5',
   accent1: '#6d5cff',
   accent2: '#00d4ff',
+  accent3: '#ff6ec7',
 };
 
-const CHIPS = ['Neura AI kim?', "O'zbek taomlari", "Navro'z bayrami nima?", 'Rasm tahlil qil'];
+const CHIPS = [
+  { t: 'Neura AI kim?', e: '💬' },
+  { t: "O'zbek taomlari", e: '🍲' },
+  { t: 'Navro\'z nima?', e: '🌷' },
+  { t: 'Rasm tahlil qil', e: '📷' },
+];
 
 interface Msg {
   id: number;
@@ -311,7 +318,7 @@ function Chat() {
           data={messages}
           keyExtractor={(m) => String(m.id)}
           renderItem={({ item }) => <MsgBubble m={item} />}
-          ListEmptyComponent={<Welcome pulse={pulse} onChip={sendText} onAnalyze={sendImage} />}
+          ListEmptyComponent={<Welcome pulse={pulse} onChip={sendText} onAnalyze={sendImage} onGen={genImage} />}
           contentContainerStyle={styles.listContent}
           keyboardShouldPersistTaps="handled"
           ListFooterComponent={busy ? <Typing /> : null}
@@ -360,12 +367,20 @@ function Welcome({
   pulse,
   onChip,
   onAnalyze,
+  onGen,
 }: {
   pulse: Animated.Value;
   onChip: (t: string) => void;
   onAnalyze: () => void;
+  onGen: () => void;
 }) {
   const glow = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.25, 0.8] });
+  const FEATURES = [
+    { e: '💬', t: 'Suhbat', d: 'O\'zbek tilida javob' },
+    { e: '💻', t: 'Kod', d: 'Dasturlash kodlari' },
+    { e: '🌍', t: 'Qidiruv', d: 'Internet ma\'lumoti' },
+    { e: '🎨', t: 'Rasm yarat', d: 'Promptdan rasm' },
+  ];
   return (
     <View style={styles.welcome}>
       <View style={styles.logoOuter}>
@@ -384,15 +399,29 @@ function Welcome({
         Neura AI — o'zbek tilidagi sun'iy intellekt yordamchingiz.{'\n'}
         Savol bering, rasm tahlil qiling yoki rasm chizdirib ko'ring.
       </Text>
-      <View style={styles.chipsWrap}>
-        {CHIPS.map((chip, i) => (
+      <View style={styles.featGrid}>
+        {FEATURES.map((f) => (
           <TouchableOpacity
-            key={chip}
-            style={styles.chip}
-            onPress={chip.startsWith('Rasm tahlil') ? onAnalyze : () => onChip(chip)}
+            key={f.t}
+            style={styles.featCard}
+            onPress={f.t === 'Rasm yarat' ? onGen : () => onChip('Neura AI nima qila oladi?')}
             activeOpacity={0.7}
           >
-            <Text style={styles.chipText}>{chip}</Text>
+            <Text style={styles.featEmoji}>{f.e}</Text>
+            <Text style={styles.featTitle}>{f.t}</Text>
+            <Text style={styles.featDesc}>{f.d}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+      <View style={styles.chipsWrap}>
+        {CHIPS.map((chip) => (
+          <TouchableOpacity
+            key={chip.t}
+            style={styles.chip}
+            onPress={chip.t.startsWith('Rasm tahlil') ? onAnalyze : () => onChip(chip.t)}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.chipText}>{chip.e} {chip.t}</Text>
           </TouchableOpacity>
         ))}
       </View>
@@ -663,6 +692,27 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   chipsWrap: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 10, paddingHorizontal: 18 },
+  featGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 10,
+    paddingHorizontal: 18,
+    marginBottom: 22,
+  },
+  featCard: {
+    width: '46%',
+    backgroundColor: C.surface,
+    borderWidth: 1,
+    borderColor: C.border,
+    borderRadius: 18,
+    paddingVertical: 16,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+  },
+  featEmoji: { fontSize: 24, marginBottom: 6 },
+  featTitle: { color: C.text, fontSize: 14, fontWeight: '700' },
+  featDesc: { color: C.muted, fontSize: 11.5, marginTop: 2, textAlign: 'center' },
   chip: {
     paddingHorizontal: 16,
     paddingVertical: 10,
