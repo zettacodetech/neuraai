@@ -790,7 +790,20 @@ async function boot() {
 /* ================= PWA ================= */
 
 if ("serviceWorker" in navigator) {
+  let refreshing = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (refreshing) return;
+    refreshing = true;
+    location.reload();
+  });
   navigator.serviceWorker.register("/sw.js").catch(() => {});
+  // Sahifa ochiq tursa ham yangilanishni avtomatik tekshirish (F5 shartsiz)
+  setInterval(() => {
+    navigator.serviceWorker
+      .getRegistration()
+      .then((r) => r && r.update().catch(() => {}))
+      .catch(() => {});
+  }, 15 * 60 * 1000);
 }
 
 let deferredPrompt = null;
