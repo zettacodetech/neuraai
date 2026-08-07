@@ -46,17 +46,33 @@ current_conv: dict[int, int] = {}
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    kb = InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton("💬 Suhbat", callback_data="menu:chat"),
+                InlineKeyboardButton("🎨 Rasm yarat", callback_data="menu:gen"),
+                InlineKeyboardButton("📷 Tahlil", callback_data="menu:photo"),
+            ],
+            [
+                InlineKeyboardButton("🌐 Sayt", url="https://neuraai.up.railway.app"),
+                InlineKeyboardButton(
+                    "📲 APK",
+                    url="https://github.com/zettacodetech/neuraai/releases/latest/download/neuraai.apk",
+                ),
+            ],
+            [InlineKeyboardButton("🆕 Suhbatni yangilash", callback_data="menu:new")],
+        ]
+    )
     await update.message.reply_text(
-        "👋 <b>Neura AI</b> — sun'iy intellekt yordamchingiz!\n\n"
-        "Savolingizni yozing — javob beraman.\n"
-        "🤖 Kod yozib beraman (python, js, sql, html)\n"
+        "👋 <b>Neura AI</b> — o'zbek tilidagi sun'iy intellekt yordamchingiz!\n\n"
+        "🟣 Savol yozing — tabiiy javob beraman\n"
+        "💻 <code>kod yoz</code> — dastur kodlayman\n"
         "📷 Rasm yuboring — tahlil qilaman\n"
-        "🌐 Bilmaganimni internetdan qidiraman\n"
-        "📈 Har suhbat bilan o'rganib boraman\n\n"
-        "Buyruqlar:\n"
-        "/new — yangi suhbat\n"
-        "/help — yordam",
+        "🎨 <code>rasm yarat ...</code> — rasm chizaman\n"
+        "🌐 Bilmaganimni internetdan qidiraman\n\n"
+        "Yuqoridagi tugmalardan foydalanishing ham mumkin 👇",
         parse_mode="HTML",
+        reply_markup=kb,
     )
 
 
@@ -147,14 +163,40 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
-    data = query.data.split(":")
-    if len(data) == 3 and data[0] == "rate":
+    data = query.data
+    if data.startswith("menu:"):
+        action = data.split(":", 1)[1]
+        uid = update.effective_user.id
+        if action == "new":
+            current_conv.pop(uid, None)
+            await query.edit_message_text(
+                "✨ <b>Yangi suhbat</b> boshlanmoqda.\nSavolingizni yozing!",
+                parse_mode="HTML",
+            )
+        elif action == "gen":
+            await query.edit_message_text(
+                "🎨 <b>Rasm yaratish</b>\n\n"
+                "Yozing, masalan:\n"
+                "<code>rasm yarat: o'rmonda quyosh botishi</code>\n\n"
+                "Endi oddiygina istakni yozing — avtomatik aniqlayman.",
+                parse_mode="HTML",
+            )
+        elif action == "photo":
+            await query.edit_message_text(
+                "📷 <b>Rasm tahlili</b>\n\n"
+                "Rasm yuboring — format, ranglar, yorug'lik va boshqa ma'lumotlarni tahlil qilaman.",
+                parse_mode="HTML",
+            )
+        return
+
+    parts = data.split(":")
+    if len(parts) == 3 and parts[0] == "rate":
         db = get_db()
-        db.rate_message(int(data[1]), int(data[2]))
+        db.rate_message(int(parts[1]), int(parts[2]))
         await query.edit_message_reply_markup(reply_markup=None)
         await query.edit_message_text(
             query.message.text
-            + ("\n\n✅ Rahmat! Bu javob meni o'rgatadi." if data[2] == "1" else "")
+            + ("\n\n✅ Rahmat! Bu javob meni o'rgatadi." if parts[2] == "1" else "")
         )
 
 
