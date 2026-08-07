@@ -28,10 +28,7 @@ const authError = document.getElementById("authError");
 const authSubmit = document.getElementById("authSubmit");
 const regFields = document.getElementById("regFields");
 const fName = document.getElementById("fName");
-const fSurname = document.getElementById("fSurname");
 const fEmail = document.getElementById("fEmail");
-const fPhone = document.getElementById("fPhone");
-const fUsername = document.getElementById("fUsername");
 const fPassword = document.getElementById("fPassword");
 
 const aboutBackdrop = document.getElementById("aboutBackdrop");
@@ -161,7 +158,7 @@ function renderText(text) {
 
 function qMessage(role, text) {
   const row = document.createElement("div");
-  row.className = "row " + role;
+  row.className = "row " + role + " msg-in";
   if (role === "ai") {
     const av = document.createElement("div");
     av.className = "avatar";
@@ -496,7 +493,7 @@ function setMode(mode) {
 authForm.onsubmit = async (e) => {
   e.preventDefault();
   const mode = document.querySelector(".tab.active").dataset.mode;
-  const username = fUsername.value.trim();
+  const email = fEmail.value.trim().toLowerCase();
   const password = fPassword.value;
   authError.textContent = "";
   authSubmit.disabled = true;
@@ -504,8 +501,7 @@ authForm.onsubmit = async (e) => {
   try {
     let data;
     if (mode === "register") {
-      const email = fEmail.value.trim();
-      if (!email || !email.includes("@")) {
+      if (!email || !email.includes("@") || !email.includes(".")) {
         authError.textContent = "To'g'ri email kiriting (masalan: ism@mail.com)";
         authSubmit.disabled = false;
         return;
@@ -518,27 +514,23 @@ authForm.onsubmit = async (e) => {
       data = await api("/api/register", {
         method: "POST",
         body: JSON.stringify({
-          username, password,
+          email, password,
           name: fName.value.trim(),
-          surname: fSurname.value.trim(),
-          email,
-          phone: fPhone.value.trim(),
           client_id: CLIENT_ID,
         }),
       });
     } else {
       data = await api("/api/login", {
         method: "POST",
-        body: JSON.stringify({ username, password, client_id: CLIENT_ID }),
+        body: JSON.stringify({ email, password, client_id: CLIENT_ID }),
       });
     }
     me = {
       token: data.token,
       username: data.username,
       name: data.name,
-      surname: data.surname || "",
+      surname: (data.surname || ""),
       email: data.email || "",
-      phone: data.phone || "",
     };
     localStorage.setItem("neura_token", data.token);
     cacheUser(me);

@@ -177,10 +177,10 @@ class Brain:
 
     # ---------- matnni tayyorlash ----------
     def _normalize(self, text: str) -> str:
-        text = text.lower().strip().replace("'", "")
-        text = re.sub(r"[^a-zа-яёўғҳқхжцчшщъыьэө0-9\s]", " ", text)
+        text = text.lower().strip().replace("'", "").replace("\u2019", "")
+        text = re.sub(r"[^a-zа-яёўғҳқхжцчшщъыьэө0-9\s-]", " ", text)
         text = re.sub(r"\s+", " ", text)
-        return text
+        return text.strip()
 
     @staticmethod
     def _stem(word: str) -> str:
@@ -202,7 +202,19 @@ class Brain:
         norm = self._normalize(text)
         best, best_len = None, 0
         for name, cfg in INTENTS.items():
-            hit = sum(1 for kw in cfg["keywords"] if kw in norm)
+            hit = 0
+            for kw in cfg["keywords"]:
+                kw = kw.strip()
+                if not kw:
+                    continue
+                if " " in kw:
+                    # ibora — to'liq mos kelishi kerak
+                    if kw in norm:
+                        hit += 1
+                else:
+                    # bitta so'z — so'z chegarasi (substring emas!)
+                    if re.search(r"(^|\s)" + re.escape(kw) + r"(\s|$)", norm):
+                        hit += 1
             if hit > best_len:
                 best, best_len = name, hit
         if best and best_len >= 1:

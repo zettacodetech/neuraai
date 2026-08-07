@@ -198,9 +198,18 @@ button:focus-visible, a:focus-visible, textarea:focus-visible, input:focus-visib
   padding: 24px; display: flex; gap: 18px; align-items: center; max-width: 640px; margin: 24px auto 0;
 }
 .founder-ava {
-  width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center;
+  width: 72px; height: 72px; border-radius: 50%; display: grid; place-items: center;
   font-size: 1.8rem; font-weight: 800; color: #fff; background: var(--grad); flex-shrink: 0;
+  object-fit: cover; border: 2px solid rgba(143,123,255,0.5);
+  box-shadow: 0 8px 28px rgba(109,92,255,0.45);
 }
+.founder-social { display: flex; gap: 8px; margin-top: 10px; }
+.f-social {
+  padding: 6px 14px; border-radius: 999px; font-size: 0.78rem; font-weight: 600;
+  border: 1px solid var(--border); background: var(--panel2); color: var(--muted);
+  transition: color 0.2s, border-color 0.2s;
+}
+.f-social:hover { color: var(--text); border-color: var(--violet2); background: rgba(109,92,255,0.12); }
 .founder-card h3 { margin: 0 0 6px; }
 .support-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 28px; }
 @media (max-width: 720px) { .support-cards { grid-template-columns: 1fr; } }
@@ -522,3 +531,58 @@ html.kb-open .layout { height: var(--kb, 100dvh); }
 
 .chat::-webkit-scrollbar, .conv-list::-webkit-scrollbar, .feat-grid::-webkit-scrollbar { width: 8px; }
 .chat::-webkit-scrollbar-thumb, .conv-list::-webkit-scrollbar-thumb { background: rgba(143,123,255,0.2); }
+
+/* ---------- premium qo'shimcha ---------- */
+.btn-primary, .l-cta, .accent-btn, .auth-submit {
+  position: relative; overflow: hidden;
+}
+.btn-primary::after, .l-cta::after, .accent-btn::after, .auth-submit::after {
+  content: ""; position: absolute; top: 0; left: -120%; width: 60%; height: 100%;
+  background: linear-gradient(100deg, transparent, rgba(255,255,255,0.35), transparent);
+  transform: skewX(-20deg);
+  animation: shine 4s ease-in-out infinite;
+}
+@keyframes shine {
+  0%, 55% { left: -120%; }
+  75%, 100% { left: 150%; }
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(18px); }
+  to { opacity: 1; transform: none; }
+}
+.hero-badge, .hero h1, .hero-sub, .hero-cta, .hero-stats {
+  animation: fadeUp 0.7s ease both;
+}
+.hero h1 { animation-delay: 0.08s; }
+.hero-sub { animation-delay: 0.16s; }
+.hero-cta { animation-delay: 0.24s; }
+.hero-stats { animation-delay: 0.32s; }
+
+.feature-stagger .f-card:not(.show) { opacity: 0.6; }
+
+.bubble pre {
+  border: 1px solid rgba(143,123,255,0.18);
+  box-shadow: inset 0 0 24px rgba(109,92,255,0.06);
+}
+.welcome-card, .f-card, .plat, .m-card, .s-card {
+  position: relative;
+}
+.welcome-card::before, .f-card::before, .plat::before, .m-card::before, .s-card::before {
+  content: ""; position: absolute; inset: -1px; border-radius: inherit;
+  padding: 1px; background: linear-gradient(160deg, rgba(143,123,255,0.35), transparent 40%);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor; mask-composite: exclude;
+  opacity: 0; transition: opacity 0.3s;
+  pointer-events: none;
+}
+.welcome-card:hover::before, .f-card:hover::before, .plat:hover::before, .m-card:hover::before, .s-card:hover::before {
+  opacity: 1;
+}
+.composer { box-shadow: var(--shadow); }
+.composer::before {
+  content: ""; position: absolute; top: 0; left: 24px; right: 24px; height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(143,123,255,0.6), transparent);
+}
+.status .dot { box-shadow: 0 0 0 0 rgba(52,211,153,0.5); animation: pulse 1.8s infinite; }
+.msg-in { animation: fadeUp 0.3s ease both; }

@@ -84,17 +84,18 @@ class AnswerRequest(BaseModel):
 
 
 class RegisterRequest(BaseModel):
-    username: str
+    email: str = ""
+    username: str = ""  # eski ilovalar uchun zaxira
     password: str
     name: str = ""
     surname: str = ""
-    email: str = ""
     phone: str = ""
     client_id: str | None = None
 
 
 class LoginRequest(BaseModel):
-    username: str
+    email: str = ""
+    username: str = ""  # eski ilovalar uchun zaxira
     password: str
     client_id: str | None = None
 
@@ -688,37 +689,34 @@ async def canvas_templates() -> JSONResponse:
 @app.post("/api/register")
 def register(req: RegisterRequest) -> JSONResponse:
     db = get_db()
-    if len(req.username.strip()) < 3:
+    email = req.email.strip().lower()
+    login = email or req.username.strip().lower()
+    if len(login) < 3:
         return JSONResponse(
-            {"error": "login kamida 3 belgi bo'lishi kerak"}, status_code=400
+            {"error": "email kamida 3 belgi bo'lishi kerak"}, status_code=400
+        )
+    if not email or "@" not in email or "." not in email:
+        return JSONResponse(
+            {"error": "to'g'ri email kiriting (masalan: ism@mail.com)"}, status_code=400
         )
     if len(req.password) < 4:
         return JSONResponse(
             {"error": "parol kamida 4 belgi bo'lishi kerak"}, status_code=400
         )
-    if "@" not in req.email or "." not in req.email:
-        return JSONResponse(
-            {"error": "to'g'ri email kiriting (masalan: ism@mail.com)"}, status_code=400
-        )
-    if req.phone and not req.phone.replace("+", "").replace(" ", "").isdigit():
-        return JSONResponse(
-            {"error": "telefon raqam to'g'ri emas (masalan: +998901234567)"},
-            status_code=400,
-        )
     if not req.name.strip():
         return JSONResponse({"error": "ismingizni kiriting"}, status_code=400)
     user_id = db.register_user(
-        req.username,
+        login,
         req.password and hash_password(req.password),
         req.name,
         req.surname or "",
-        req.email or "",
+        email,
         req.phone or "",
         req.client_id,
     )
     if user_id is None:
         return JSONResponse(
-            {"error": "bu login yoki email band — boshqasini tanlang"}, status_code=409
+            {"error": "bu email band — boshqasini tanlang"}, status_code=409
         )
     token = new_token()
     db.set_token(user_id, token)
@@ -739,13 +737,17 @@ def register(req: RegisterRequest) -> JSONResponse:
 @app.post("/api/login")
 def login(req: LoginRequest) -> JSONResponse:
     db = get_db()
-    user = db.get_user_by_username(req.username)
+    email = req.email.strip().lower()
+    login = email or req.username.strip().lower()
+    user = db.get_user_by_email(login) if login else None
+    if not user:
+        user = db.get_user_by_username(login) if login else None
     if (
         not user
         or not user.get("password_hash")
         or not verify_password(req.password, user["password_hash"])
     ):
-        return JSONResponse({"error": "login yoki parol noto'g'ri"}, status_code=401)
+        return JSONResponse({"error": "email yoki parol noto'g'ri"}, status_code=401)
     if req.client_id:
         db.transfer_guest(req.client_id, user["id"])
     token = new_token()

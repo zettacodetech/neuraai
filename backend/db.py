@@ -328,6 +328,10 @@ class Database:
         row = self._row("SELECT * FROM users WHERE username = ?", (username.lower(),))
         return dict(row) if row else None
 
+    def get_user_by_email(self, email: str) -> dict | None:
+        row = self._row("SELECT * FROM users WHERE email = ?", (email.lower(),))
+        return dict(row) if row else None
+
     def register_user(
         self,
         username: str,
