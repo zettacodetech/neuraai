@@ -797,14 +797,49 @@ if ("serviceWorker" in navigator) {
     location.reload();
   });
   navigator.serviceWorker.register("/sw.js").catch(() => {});
-  // Sahifa ochiq tursa ham yangilanishni avtomatik tekshirish (F5 shartsiz)
-  setInterval(() => {
+
+  // Yangilanishni MAKSIMAL tezlikda tekshirish — F5 shartsiz
+  let swTimer = null;
+  function swCheck() {
+    if (document.visibilityState !== "visible") return;
     navigator.serviceWorker
       .getRegistration()
       .then((r) => r && r.update().catch(() => {}))
       .catch(() => {});
-  }, 15 * 60 * 1000);
+  }
+  function startSwTimer() {
+    if (swTimer) clearInterval(swTimer);
+    swTimer = setInterval(swCheck, 30 * 1000);
+  }
+  startSwTimer();
+  document.addEventListener("visibilitychange", swCheck);
+  window.addEventListener("focus", swCheck);
+  window.addEventListener("pageshow", swCheck);
 }
+
+/* ================= mobil klaviatura ================= */
+
+(function mobileKeyboard() {
+  const composer = document.querySelector(".composer");
+  if (!composer || !window.visualViewport) return;
+  const apply = () => {
+    const vh = window.visualViewport;
+    document.documentElement.style.setProperty("--kb", vh.height + "px");
+    const offset = window.innerHeight - (vh.height + vh.offsetTop);
+    if (offset > 80) {
+      document.documentElement.classList.add("kb-open");
+      composer.style.paddingBottom = "calc(14px + " + offset + "px)";
+      setTimeout(() => composer.scrollIntoView({ block: "nearest" }), 80);
+    } else {
+      document.documentElement.classList.remove("kb-open");
+      composer.style.paddingBottom = "";
+    }
+  };
+  window.visualViewport.addEventListener("resize", apply);
+  window.visualViewport.addEventListener("scroll", apply);
+  document.addEventListener("focusin", () => setTimeout(apply, 120));
+  document.addEventListener("focusout", apply);
+})();
 
 let deferredPrompt = null;
 const installBtn = document.getElementById("installBtn");
