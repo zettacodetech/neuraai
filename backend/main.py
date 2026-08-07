@@ -300,6 +300,49 @@ def version() -> JSONResponse:
 # ================= suhbat =================
 
 
+def _gen_request(text: str) -> tuple[str, str] | None:
+    """Rasm/video generatsiya so'rovini aniqlaydi.
+    Qaytaradi: ('image'|'video', prompt) yoki None."""
+    import re
+
+    t = text.strip()
+    low = t.lower()
+    # Tahlil / savol so'zlari — generatsiya EMAS
+    if re.search(r"(tahlil|analiz|izohla|tarifla|bilasan?mi|oladimi|mumkinmi)", low):
+        return None
+    has_img = bool(re.search(r"(rasim|rasm|surat|surot)", low))
+    has_video = bool(re.search(r"\bvideo\b", low))
+    has_verb = bool(re.search(r"(chiz|yarat|yasa|qil|draw|paint|create|make|gen)", low))
+    if (not has_img and not has_video) or not has_verb:
+        return None
+
+    if has_img and not has_video:
+        kind = "image"
+        prompt = re.sub(r"(rasim|rasm|surat|surot)", " ", t, flags=re.IGNORECASE)
+    elif has_video and not has_img:
+        kind = "video"
+        prompt = re.sub(r"^\s*video\b\s*", "", t, flags=re.IGNORECASE)
+    else:
+        kind = "video" if low.index("video") < low.index("rasm") else "image"
+        prompt = re.sub(r"(rasim|rasm|surat|surot)", " ", t, flags=re.IGNORECASE)
+        if kind == "video":
+            prompt = re.sub(r"^\s*video\b\s*", "", prompt, flags=re.IGNORECASE)
+
+    prompt = re.sub(
+        r"\w*(chiz|yarat|yasa|qil|draw|paint|create|make)\w*",
+        " ",
+        prompt,
+        flags=re.IGNORECASE,
+    )
+    prompt = re.sub(
+        r"\b(ber|bеr|bеrib|berib|tashla)\b", " ", prompt, flags=re.IGNORECASE
+    )
+    prompt = re.sub(r"[\s:;,.\-]+", " ", prompt).strip()
+    if len(prompt) < 2:
+        prompt = ""  # "rasim chizib ber" kabi — default sahnaga o'tadi
+    return (kind, prompt)
+
+
 @app.post("/api/chat")
 def chat(req: ChatRequest) -> JSONResponse:
     db = get_db()
@@ -361,6 +404,54 @@ def chat(req: ChatRequest) -> JSONResponse:
         model_name = os.environ.get(key, "").strip() or None
     elif req.model:
         model_name = req.model.strip() or None
+
+    # Rasm/video so'rovi — LLM'ga bermay, to'g'ridan generatsiya qilamiz
+    gen = _gen_request(req.message)
+    if gen:
+        kind, prompt = gen
+        if not prompt:
+            prompt = (
+                "chiroyli tabiat manzarasi"
+                if kind == "image"
+                else "go'zal tabiat panoramasi"
+            )
+        try:
+            path = generate_image(prompt) if kind == "image" else generate_video(prompt)
+            url = _gen_url(path)
+            label = "🎨 Rasm tayyor!" if kind == "image" else "🎬 Video tayyor!"
+            reply = f"{label}\nPrompt: {prompt}\n\n{url}"
+            msg_id = db.add_message(
+                user_id,
+                "assistant",
+                reply,
+                source="generation",
+                conversation_id=conv_id,
+            )
+            return JSONResponse(
+                {
+                    "reply": reply,
+                    "source": "generation",
+                    "message_id": msg_id,
+                    "conversation_id": conv_id,
+                    "model": model_name,
+                    "media_type": kind,
+                    "media_url": url,
+                }
+            )
+        except Exception as exc:
+            reply = f"⚠️ Rasm yaratishda xatolik: {exc}"
+            msg_id = db.add_message(
+                user_id, "assistant", reply, source="error", conversation_id=conv_id
+            )
+            return JSONResponse(
+                {
+                    "reply": reply,
+                    "source": "error",
+                    "message_id": msg_id,
+                    "conversation_id": conv_id,
+                    "model": model_name,
+                }
+            )
 
     reply, source = brain.answer(
         req.message, db.get_knowledge(), history=history, model=model_name

@@ -325,8 +325,12 @@ async function send(text) {
 
     const data = await api("/api/chat", { method: "POST", body: JSON.stringify(body) });
     typing.remove();
-    const row = qMessage("ai", data.reply);
-    addFeedback(row, data.message_id);
+    if (data.media_url) {
+      qMedia(data.media_url, data.media_type === "video", text);
+    } else {
+      const row = qMessage("ai", data.reply);
+      addFeedback(row, data.message_id);
+    }
 
     if (currentConv === null && data.conversation_id) {
       currentConv = data.conversation_id;
