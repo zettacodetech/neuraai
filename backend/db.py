@@ -219,8 +219,24 @@ class Database:
                 self.conn.executescript(_SQLITE_DDL)
 
     def _migrate(self):
-        """Eski SQLite DB'lardan yangi ustunlarni qo'shish (Postgres kerak emas)."""
+        """Eski sxemadan yangi ustunlarni qo'shish (SQLite ham, Postgres ham)."""
         if self.pg:
+            with self._lock:
+                with self.conn.cursor() as cur:
+                    for col in (
+                        "username",
+                        "password_hash",
+                        "name",
+                        "surname",
+                        "email",
+                        "phone",
+                        "token",
+                        "client_id",
+                    ):
+                        cur.execute(
+                            f"ALTER TABLE users ADD COLUMN IF NOT EXISTS {col} TEXT"
+                        )
+                self.conn.commit()
             return
         with self._lock:
             user_cols = [r[1] for r in self.conn.execute("PRAGMA table_info(users)")]

@@ -610,6 +610,7 @@ async function openKeyModal() {
 }
 
 keyCreateBtn.onclick = async () => {
+  if (!me) { closeAuth(); openAuth(); return; }
   keyCreateBtn.disabled = true;
   keyError.textContent = "";
   try {
@@ -629,11 +630,13 @@ keyCreateBtn.onclick = async () => {
 };
 
 keyCopyBtn.onclick = () => {
+  if (!me) return;
   const val = document.getElementById("apiKeyVal");
   if (val && navigator.clipboard) navigator.clipboard.writeText(val.textContent);
 };
 
 keyRevokeBtn.onclick = async () => {
+  if (!me) return;
   try {
     await api("/api/key?token=" + encodeURIComponent(me.token), { method: "DELETE" });
     apiKeyBox.innerHTML = '<span class="muted">Kalit bekor qilindi.</span>';
