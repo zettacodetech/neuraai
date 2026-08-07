@@ -20,5 +20,8 @@ RUN chmod +x /pull-models.sh
 
 EXPOSE 11434
 
+# ollama/ollama image ENTRYPOINT='ollama' — uni bekor qilamiz
+ENTRYPOINT []
+
 # Ollama server + modellarni yuklash
 CMD ["/bin/sh", "-c", "/pull-models.sh"]
