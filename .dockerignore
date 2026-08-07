@@ -1,0 +1,16 @@
+# Build kontekstiga keraksiz narsalar kirmasin
+.git
+.gitignore
+__pycache__
+*.pyc
+*.pyo
+.venv
+venv
+backend/venv
+data
+*.log
+.env
+backend/.env
+node_modules
+frontend/apk/neuraai-v1.1.0.apk
+.DS_Store

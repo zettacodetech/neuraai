@@ -21,4 +21,7 @@ data/
 # IDE
 .idea/
 .vscode/
-pyrightconfig.jsonfrontend/apk/neuraai-v1.1.0.apk
+pyrightconfig.json
+
+# Eski APK nusxasi (yangisi frontend/apk/neuraai.apk)
+frontend/apk/neuraai-v1.1.0.apk

@@ -1,5 +1,7 @@
 /* ==================== NeuraAI — yangi dizayn ==================== */
 
+[hidden] { display: none !important; }
+
 :root {
   --bg: #05060f;
   --bg2: #0a0c1c;
