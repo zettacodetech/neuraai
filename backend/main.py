@@ -32,6 +32,10 @@ from learning import collect_unanswered, learn_from_messages, learn_pair
 from seeds import SEED_KNOWLEDGE
 from vision import analyze as vision_analyze
 
+from llm import OPENROUTER_BASE_URL, llm_chat
+
+_MODELS_CACHE: dict = {"ts": 0.0, "items": []}
+
 app = FastAPI(title="Neura AI")
 
 ADMIN_KEY = os.environ.get("ADMIN_KEY", "admin123")
@@ -763,6 +767,43 @@ def conversation_messages(conv_id: int, token: str = "") -> JSONResponse:
     return JSONResponse(
         {"title": conv["title"], "items": db.conversation_messages(conv_id, user["id"])}
     )
+
+
+@app.get("/api/models")
+def list_models() -> JSONResponse:
+    """OpenRouter'ning barcha modellari ro'yxati (5 daqiqa cache)."""
+    import time as _time
+
+    now = _time.time()
+    if _MODELS_CACHE["ts"] and now - _MODELS_CACHE["ts"] < 300:
+        return JSONResponse({"items": _MODELS_CACHE["items"]})
+
+    url = OPENROUTER_BASE_URL + "/models"
+    api_key = os.environ.get("OPENROUTER_API_KEY", "").strip()
+    req = urllib.request.Request(
+        url,
+        headers={
+            "Authorization": "Bearer " + api_key,
+            "User-Agent": "NeuraAI/1.1",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=15) as r:
+            data = json.loads(r.read().decode("utf-8"))
+        items = [
+            {
+                "id": m["id"],
+                "name": m.get("name", m["id"]),
+                "ctx": m.get("context_length", 0),
+                "pricing": m.get("pricing", {}),
+            }
+            for m in data.get("data", [])
+        ]
+        _MODELS_CACHE["items"] = items
+        _MODELS_CACHE["ts"] = now
+        return JSONResponse({"items": items})
+    except Exception:
+        return JSONResponse({"items": _MODELS_CACHE["items"]}, status_code=502)
 
 
 # ================= admin =================

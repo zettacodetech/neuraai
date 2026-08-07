@@ -113,7 +113,7 @@ class _GeminiProvider:
 class _OllamaProvider:
     """Lokal Ollama server (API key kerak emas). Vision ham qo'llab-quvvatlanadi."""
 
-    def __init__(self, base_url: str = None, model: str = None):
+    def __init__(self, base_url: str | None = None, model: str | None = None):
         self.base_url = base_url or os.environ.get(
             "OLLAMA_BASE_URL", "http://localhost:11434"
         )
@@ -133,7 +133,7 @@ class _OllamaProvider:
         messages: list[dict],
         temperature: float = 0.4,
         max_tokens: int = 600,
-        images: list[str] = None,
+        images: list[str] | None = None,
     ) -> str | None:
         # Ollama format: messages + images (base64)
         ollama_messages = []
@@ -246,7 +246,7 @@ def _build_providers() -> list:
     if mode == "groq":
         providers.sort(key=lambda p: p.base_url != GROQ_BASE_URL)
     elif mode == "openrouter":
-        providers.sort(key=lambda p: p.base_url == GROQ_BASE_URL)
+        providers.sort(key=lambda p: p.base_url != OPENROUTER_BASE_URL)
     elif mode == "kie":
         providers.sort(
             key=lambda p: (p.base_url == GROQ_BASE_URL, p.base_url != KIE_BASE_URL)
@@ -274,40 +274,47 @@ def llm_chat(
     temperature: float = 0.4,
     max_tokens: int = 600,
 ) -> str | None:
-    """OpenAI-compatible /chat/completions — providerlar bo'ylab zanjir. Xatoda None."""
+    """Providerlar bo'ylab zanjir — xatoda keyingi prov qiladi, bari yiqilsa None."""
     if not LLM_PROVIDERS:
         return None
     last_error: Exception | None = None
     for provider in LLM_PROVIDERS:
         if not provider.available:
             continue
-        limit = (
-            min(max_tokens, OPENROUTER_MAX_TOKENS)
-            if OPENROUTER_BASE_URL in provider.base_url
-            else max_tokens
-        )
-        body = json.dumps(
-            {
-                "model": provider.model,
-                "messages": messages,
-                "temperature": temperature,
-                "max_completion_tokens": limit,
-            }
-        ).encode("utf-8")
-        req = urllib.request.Request(
-            provider.base_url.rstrip("/") + "/chat/completions",
-            data=body,
-            headers={
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {provider.api_key}",
-                "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36",
-            },
-            method="POST",
-        )
         try:
-            with urllib.request.urlopen(req, timeout=LLM_TIMEOUT) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
-            content = data["choices"][0]["message"]["content"]
+            if hasattr(provider, "chat") and callable(provider.chat):
+                # Ollama / Gemini / DDG — o'z API formatiga ega
+                content = provider.chat(
+                    messages, temperature=temperature, max_tokens=max_tokens
+                )
+            else:
+                # OpenAI-compatible /chat/completions
+                limit = (
+                    min(max_tokens, OPENROUTER_MAX_TOKENS)
+                    if OPENROUTER_BASE_URL in provider.base_url
+                    else max_tokens
+                )
+                body = json.dumps(
+                    {
+                        "model": provider.model,
+                        "messages": messages,
+                        "temperature": temperature,
+                        "max_completion_tokens": limit,
+                    }
+                ).encode("utf-8")
+                req = urllib.request.Request(
+                    provider.base_url.rstrip("/") + "/chat/completions",
+                    data=body,
+                    headers={
+                        "Content-Type": "application/json",
+                        "Authorization": f"Bearer {provider.api_key}",
+                        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36",
+                    },
+                    method="POST",
+                )
+                with urllib.request.urlopen(req, timeout=LLM_TIMEOUT) as resp:
+                    data = json.loads(resp.read().decode("utf-8"))
+                content = data["choices"][0]["message"]["content"]
             if isinstance(content, str) and content.strip():
                 return content.strip()
             return None
