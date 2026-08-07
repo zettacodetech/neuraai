@@ -27,6 +27,150 @@ def _seed(text: str) -> int:
     return int(hashlib.sha256(text.encode("utf-8")).hexdigest()[:8], 16)
 
 
+_translate_cache: dict[str, str] = {}
+
+_UZ_HINTS = frozenset(
+    """
+    va bilan uchun haqida lekin ammo yoki xoh
+    yangi katta kichik chiroyli go'zal ajoyib bejirim toza
+    quyosh botishi chiqishi tog' daryo o'rmon dengiz osmon bulut yulduz
+    kecha tong ertalab kun oy yil bahor yoz kuz qish shahar qishloq
+    uy daraxt gul bog' bog'cha qor yomg'ir shamol suv qoya tosh yo'l ko'prik
+    ona ota bola qiz o'g'il odam inson ayol erkak hayvon it mushuk qush ot
+    cho'l sahro o'rik olma non choy meva sabzavot qovun tarvuz uzum baliq
+    rasm surat tasvir chiz chizing chizib yarat yarating yasa yasang qo'sh
+    ko'rsat qanday nega nima kim qayerda qachon nechta menga senga
+    o'zbek o'zbekcha toshkent samarqand buxoro xiva andijon namangan
+    milliy cholg'u do'st do'stlar bolalar oila bizning mana endi hozir
+    salom rahmat iltimos yaxshi yomon yo'q ha bu u shu o'sha
+    """.split()
+)
+
+
+def _looks_english(text: str) -> bool:
+    """Inglizcha bo'lishi aniq bo'lsa True.
+
+    O'zbek lotin yozuvi ham ASCII — shuning uchun faqat belgiga emas,
+    O'zbekcha kalit so'zlarga ham qaraymiz.
+    """
+    letters = [c for c in text if c.isalpha()]
+    if not letters:
+        return True
+    non_ascii = sum(1 for c in letters if ord(c) > 127)
+    if non_ascii / len(letters) > 0.15:
+        return False
+    words = set(w.strip(".,!?;:'\"()[]{}") for w in text.lower().split())
+    return not (words & _UZ_HINTS)
+
+
+_META_PHRASES = (
+    "the task",
+    "translate the user",
+    "keep every object",
+    "preserving every",
+    "the instruction",
+    "the user wrote",
+    "image request",
+    "no analysis",
+    "only the translated",
+)
+
+
+def _clean_translation(out: str) -> str:
+    """Fikrlash/tahlil qismini olib, faqat tarjima qismini qoldirish."""
+    out = (out or "").strip()
+    for marker in (
+        "The user wrote",
+        "Let's parse",
+        "Possibly means",
+        "Actually",
+        "This appears",
+        "So the phrase",
+        "We need to",
+        "The instruction",
+        "The task",
+        "Always preserve",
+        "Therefore",
+        "is playing?",
+        "Hmm",
+    ):
+        idx = out.lower().find(marker.lower())
+        if idx >= 0:
+            out = out[:idx]
+            break
+    if out.count('"') >= 2:
+        i1, i2 = out.find('"'), out.rfind('"')
+        if i2 > i1:
+            out = out[i1 + 1 : i2]
+    out = out.strip().strip("()[]'\" ")
+    lines = [ln.strip() for ln in out.splitlines() if ln.strip()]
+    if lines:
+        lines = [
+            ln
+            for ln in lines
+            if not ln.lower().startswith(("you ", "the user", "possible", "task"))
+        ]
+        out = lines[0] if lines else out
+    return out[:400]
+
+
+def _is_meta(out: str) -> bool:
+    low = out.lower()
+    return any(p in low for p in _META_PHRASES) or len(out) > 200
+
+
+def _english_prompt(prompt: str) -> str:
+    """Uzbek/o'zbekcha promptni inglizchaga tarjima qilib beradi.
+
+    AI rasm/video modellari inglizcha promptni aniq tushunadi. Manba va boshqa
+    tillardagi so'rovlar avval chiqarish provayderi orqali inglizchaga
+    o'tkaziladi (2 ta urinish); ikkalasi ham bo'lmasa — asl prompt qaytariladi.
+    """
+    prompt = (prompt or "").strip()
+    if _looks_english(prompt):
+        return prompt
+    if prompt in _translate_cache:
+        return _translate_cache[prompt]
+    from llm import llm_chat
+
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "You are a precise, faithful translator for image generation. "
+                "Translate the user's image request into English. "
+                "Keep EVERY object, noun, place, and adjective from the original "
+                "(e.g. mountains, river, sun, buildings). "
+                "Reply with ONLY the translated English phrase in ONE short "
+                "sentence. No analysis, no quotes, no explanation."
+            ),
+        },
+        {"role": "user", "content": prompt},
+    ]
+    fast_model = os.environ.get("NEURA_FAST_MODEL", "").strip()
+    for _ in range(2):
+        try:
+            out = _clean_translation(
+                llm_chat(
+                    messages,
+                    temperature=0.2,
+                    max_tokens=250,
+                    model=fast_model or None,
+                )
+                or ""
+            )
+        except Exception:
+            break
+        if out and not _is_meta(out) and out.lower() != prompt.lower():
+            letters = [c for c in out if c.isalpha()]
+            if letters:
+                non_ascii = sum(1 for c in letters if ord(c) > 127)
+                if non_ascii / len(letters) <= 0.15:
+                    _translate_cache[prompt] = out
+                    return out
+    return prompt
+
+
 def _available() -> bool:
     """CUDA GPU mavjudmi?"""
     try:
@@ -147,7 +291,9 @@ def generate_image(prompt: str) -> str:
     """Prompt'ga mos PNG yaratib, yo'lini qaytaradi.
 
     Tartib: Pollinations (haqiqiy AI) → deAPI → Magic Hour → GPU SDXL → protsur.
+    O'zbekcha so'rovlar avval inglizchaga tarjima qilinadi.
     """
+    prompt = _english_prompt(prompt)
     try:
         import pollinations
 
@@ -209,7 +355,9 @@ def generate_video(prompt: str) -> str:
 
     Tartib: Pollinations (real AI) → JSON2Video (real render) → deAPI
     (LTX-Video) → Magic Hour (haqiqiy AI) → GPU SVD → protsur animatsiya.
+    O'zbekcha so'rovlar avval inglizchaga tarjima qilinadi.
     """
+    prompt = _english_prompt(prompt)
     try:
         import pollinations
 
