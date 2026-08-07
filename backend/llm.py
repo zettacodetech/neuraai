@@ -246,7 +246,7 @@ def _build_providers() -> list:
     if mode == "groq":
         providers.sort(key=lambda p: p.base_url != GROQ_BASE_URL)
     elif mode == "openrouter":
-        providers.sort(key=lambda p: p.base_url != OPENROUTER_BASE_URL)
+        providers.sort(key=lambda p: getattr(p, "base_url", "") != OPENROUTER_BASE_URL)
     elif mode == "kie":
         providers.sort(
             key=lambda p: (p.base_url == GROQ_BASE_URL, p.base_url != KIE_BASE_URL)
