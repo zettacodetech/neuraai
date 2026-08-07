@@ -1,0 +1,70 @@
+name: Android APK Build
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Install Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Setup Keystore dir
+        run: |
+          mkdir -p "$ANDROID_HOME/licenses"
+          echo "android-sdk-license" > "$ANDROID_HOME/licenses/android-sdk-license"
+          echo "e9fcc5f235bac32626c4e9de6e44c847754fb5e9" >> "$ANDROID_HOME/licenses/android-sdk-license"
+
+      - name: npm install
+        run: npm install
+
+      - name: Build release APK
+        run: |
+          export ANDROID_HOME="$ANDROID_SDK_ROOT"
+          ./gradlew :app:assembleRelease \
+            -PreactNativeArchitectures=arm64-v8a \
+            --no-daemon --stacktrace
+
+      - name: Locate APK
+        id: apk
+        run: |
+          APK_PATH=$(ls android/app/build/outputs/apk/release/*.apk)
+          echo "apk_path=$APK_PATH" >> "$GITHUB_OUTPUT"
+          echo "app size: $(du -h "$APK_PATH")"
+
+      - name: Attach APK to Release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          APK="${{ steps.apk.outputs.apk_path }}"
+          gh release upload "${GITHUB_REF_NAME}" "$APK" --clobber --repo "${GITHUB_REPOSITORY}"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: neuraai-apk
+          path: mobile/android/app/build/outputs/apk/release/*.apk

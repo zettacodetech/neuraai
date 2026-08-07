@@ -226,21 +226,25 @@ function showWelcome() {
   w.innerHTML =
     "<div class='welcome-logo'>✦</div>" +
     "<h2>" + (name ? "Assalomu alaykum, <span class='accent'>" + esc(name) + "</span>!" : "Sizning aqlli<br><span class='accent'>yordamchingiz</span>") + "</h2>" +
-    "<p>Men noldan qurilgan sun'iy intellektman. Suhbatlashaman, kod yozaman, rasmni tahlil qilaman, internetdan izlayman va har suhbatda o'rganib boraman.</p>";
-  const chips = w.appendChild(document.createElement("div"));
-  chips.className = "welcome-chips";
-  [
-    "💬 Suhbat quraman",
-    "💻 Kod yozaman",
-    "📷 Rasm tahlil qilaman",
-    "🌍 Internetdan qidiraman",
-  ].forEach((t) => {
-    const c = document.createElement("button");
-    c.className = "chip";
-    c.textContent = t;
-    c.onclick = () => send("Nima qila olasan?");
-    chips.appendChild(c);
+    "<p>Men suhbatlashib o'rganadigan sun'iy intellektman. Savol bering, kod yozang, rasm tahlil qiling yoki yangi rasm/video yarating.</p>";
+  const grid = w.appendChild(document.createElement("div"));
+  grid.className = "welcome-grid";
+  const items = [
+    { e: "💬", t: "Suhbat", d: "Har qanday savolga tabiiy javob" },
+    { e: "💻", t: "Kod", d: "Dasturlash kodlari yozadi" },
+    { e: "📷", t: "Rasm tahlili", d: "Rasmni o'qiydi va izohlaydi" },
+    { e: "🌍", t: "Qidiruv", d: "Internetdan yangi ma'lumot" },
+    { e: "🎨", t: "Rasm yaratish", d: "Prompt bo'yicha rasm chizadi" },
+    { e: "🎬", t: "Video yaratish", d: "Matnni videoga aylantiradi" },
+  ];
+  items.forEach((it) => {
+    const card = document.createElement("button");
+    card.className = "welcome-card";
+    card.innerHTML = "<span class='card-emoji'>" + it.e + "</span><b>" + it.t + "</b><small>" + it.d + "</small>";
+    card.onclick = () => send(it.t === "Rasm tahlili" ? "Rasmni tahlil qil" : it.t === "Rasm yaratish" ? "Rasm yarat" : it.t === "Video yaratish" ? "Video yarat" : "Neura AI nima qila oladi?");
+    grid.appendChild(card);
   });
+  w.appendChild(grid);
   chat.appendChild(w);
 }
 
