@@ -269,7 +269,7 @@ function qMessage(role, text) {
     copy.onclick = () => {
       if (!navigator.clipboard) return;
       navigator.clipboard.writeText(text).then(() => {
-        copy.classList.add("done");
+        copy.classList.add("ok");
         copy.textContent = "✓";
         setTimeout(() => { copy.classList.remove("ok"); copy.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>'; }, 1200);
       });
@@ -401,7 +401,7 @@ function showWelcome() {
   const items = [
     { e: "💬", t: "Suhbat", d: "Har qanday savolga tabiiy javob", q: "Nima qila olasan?" },
     { e: "💻", t: "Kod", d: "Dasturlash kodlari yozadi", q: "Python dastur yozib ber: foydalanuvchi ismini so'rab, salomlashadigan" },
-    { e: "📷", t: "Rasm tahlili", d: "Rasmni o'qiydi va izohlaydi", q: "" },
+    { e: "📷", t: "Rasm tahlili", d: "Rasmni o'qiydi va izohlaydi", file: true },
     { e: "🌍", t: "Qidiruv", d: "Internetdan yangi ma'lumot", q: "O'zbekiston bo'yicha so'nggi kunlardagi muhim yangiliklarni topib ber" },
     { e: "🎨", t: "Rasm yaratish", d: "Prompt bo'yicha rasm chizadi", art: "image" },
     { e: "🎬", t: "Video yaratish", d: "Matnni videoga aylantiradi", art: "video" },
@@ -495,15 +495,13 @@ async function send(text) {
             qMessage("ai", evt.reply || "⚠️ Xatolik yuz berdi.");
           } else if (evt.type === "done") {
             typing.remove();
-            if (!ai) {
-              // Tezkor javob (intent/kod/bilim) — text eventlarsiz done kelgan
-              if (evt.reply) {
-                const made = aiRowBubble();
-                ai = made;
-                ai.bubble.innerHTML = renderText(evt.reply);
-                acc = evt.reply;
-                chat.appendChild(ai.row);
-              }
+            if (!ai && evt.reply) {
+              ai = aiRowBubble();
+              chat.appendChild(ai.row);
+            }
+            if (evt.reply) {
+              acc = evt.reply;
+              ai.bubble.innerHTML = renderText(acc);
             }
             if (ai) {
               ai.bubble.appendChild(voiceButton(acc));
@@ -514,7 +512,7 @@ async function send(text) {
               copy.onclick = () => {
                 if (!navigator.clipboard) return;
                 navigator.clipboard.writeText(acc).then(() => {
-                  copy.classList.add("done");
+                  copy.classList.add("ok");
                   copy.textContent = "✓";
                   setTimeout(() => { copy.classList.remove("ok"); copy.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>'; }, 1200);
                 });
@@ -551,9 +549,9 @@ async function send(text) {
       }
       if (currentConv === null && data.conversation_id) {
         currentConv = data.conversation_id;
-        refreshConversations();
-        updateStats();
       }
+      refreshConversations();
+      updateStats();
     } catch (e2) {
       typing.remove();
       if (e2.status === 401) {

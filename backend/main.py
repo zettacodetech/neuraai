@@ -330,6 +330,9 @@ _ANALYSIS_RE = re.compile(
     r"mumkinmi|nima degan|qanday qilin|\bwhat\b|\bwhy\b|\bhow\b)"
 )
 _QUESTION_RE = re.compile(r"\b(nima|nega|qachon|qanday|qayer|kim|nechta)\b|\?")
+_TALK_RE = re.compile(
+    r"(gapirib?|ayt(bing)?|haqida|tavsifla|ma'lu[mt]ot|izohl?ab?|qanday ko'rinish)"
+)
 _IMG_RE = re.compile(r"(rasim|rasm|surot|surat|tasvir|image|\bphoto\b)")
 _VID_RE = re.compile(r"(video|vidio)")
 _PAINT_RE = re.compile(r"(chiz|draw|paint)")
@@ -355,6 +358,10 @@ def _gen_request(text: str) -> tuple[str, str] | None:
     low = t.lower()
     # Tahlil / savol — generatsiya EMAS
     if _ANALYSIS_RE.search(low) or _QUESTION_RE.search(low):
+        return None
+    # "rasm haqida gapirib ber" kabi suhbat so'rovlari — generatsiya EMAS,
+    # faqat aniq yaratish fe'li bo'lsa generatsiya
+    if _TALK_RE.search(low) and not _PAINT_RE.search(low) and not _MAKE_RE.search(low):
         return None
 
     has_video = bool(_VID_RE.search(low))
@@ -1124,6 +1131,9 @@ def login(req: LoginRequest) -> JSONResponse:
             "token": token,
             "username": user["username"],
             "name": user["name"] or user["username"],
+            "surname": user.get("surname") or "",
+            "email": user.get("email") or "",
+            "phone": user.get("phone") or "",
         }
     )
 
