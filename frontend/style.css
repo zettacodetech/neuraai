@@ -935,3 +935,48 @@ html.kb-open .layout { height: var(--kb, 100dvh); }
   .rv { opacity: 1; transform: none; }
   .eye-row { opacity: 1; transform: none; }
 }
+
+/* ============ 99999D — jonli AI tarmog'i ============ */
+
+/* neural-network canvas */
+#neuralNet { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0.9; pointer-events: none; }
+@media (hover: none), (max-width: 768px) { #neuralNet { opacity: 0.35; } }
+
+/* skroll progress-bari */
+.progress-bar {
+  position: fixed; top: 0; left: 0; height: 3px; width: 100%;
+  transform-origin: 0 50%; transform: scaleX(0); z-index: 90; pointer-events: none;
+  background: linear-gradient(90deg, #22d3ee, #8f7bff, #ec4899, #22d3ee);
+  background-size: 300% 100%; animation: float-shift 4s linear infinite;
+  box-shadow: 0 0 14px rgba(34,211,238,0.5);
+}
+
+/* kursor holo nuri */
+#cursorGlow {
+  position: fixed; left: 0; top: 0; width: 420px; height: 420px;
+  margin: -210px 0 0 -210px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(34,211,238,0.10), rgba(143,123,255,0.05) 40%, transparent 65%);
+  mix-blend-mode: screen; pointer-events: none; z-index: 30; opacity: 0;
+  transition: opacity 0.35s;
+}
+@media (hover: none) { #cursorGlow { display: none; } }
+
+/* welcome-logo orbit halqalari */
+.welcome-logo { position: relative; }
+.welcome-logo::before, .welcome-logo::after {
+  content: ""; position: absolute; border-radius: 50%; pointer-events: none;
+}
+.welcome-logo::before {
+  inset: -16px; border: 1px dashed rgba(34,211,238,0.4);
+  animation: spin 9s linear infinite;
+}
+.welcome-logo::after {
+  inset: -30px; border: 1px solid rgba(143,123,255,0.2);
+  animation: spin 16s linear infinite reverse;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  #neuralNet { display: none; }
+  .welcome-logo::before, .welcome-logo::after { animation: none !important; }
+}

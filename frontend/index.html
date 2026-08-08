@@ -16,11 +16,13 @@
   <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body>
+  <div class="progress-bar" id="progressBar" aria-hidden="true"></div>
   <div class="aurora" aria-hidden="true">
     <span class="orb o1"></span>
     <span class="orb o2"></span>
     <span class="orb o3"></span>
     <span class="grid-line"></span>
+    <canvas id="neuralNet"></canvas>
     <div class="particles">
       <span style="--x:5%;--d:0s;--s:5px;--c:#7dd3fc"></span>
       <span style="--x:14%;--d:2.5s;--s:3px;--c:#c4b5fd"></span>
@@ -460,6 +462,8 @@ $ neura ollama run qwen2.5</code></pre>
       </div>
     </div>
   </div>
+
+  <div id="cursorGlow" aria-hidden="true"></div>
 
   <script src="/static/app.js"></script>
 </body>

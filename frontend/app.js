@@ -1153,3 +1153,132 @@ document.addEventListener("click", (e) => {
   btn.appendChild(sp);
   setTimeout(() => sp.remove(), 600);
 });
+
+/* ================= 99999D — jonli AI tarmog'i ================= */
+
+// 6) neural-network canvas — butun sayt fonida tirik tarmoq
+(function neuralNet() {
+  const cv = document.getElementById("neuralNet");
+  if (!cv || reduceMotion || !window.matchMedia("(pointer: fine)").matches) return;
+  const ctx = cv.getContext("2d");
+  const DPR = Math.min(window.devicePixelRatio || 1, 1.5);
+  let W = 0, H = 0, nodes = [];
+  function resz() {
+    W = cv.width = Math.floor(window.innerWidth * DPR);
+    H = cv.height = Math.floor(window.innerHeight * DPR);
+    const n = Math.min(90, Math.floor((window.innerWidth * window.innerHeight) / 24000));
+    nodes = Array.from({ length: n }, () => ({
+      x: Math.random() * W, y: Math.random() * H,
+      vx: (Math.random() - 0.5) * 0.24 * DPR,
+      vy: (Math.random() - 0.5) * 0.24 * DPR,
+      r: (Math.random() * 1.6 + 0.8) * DPR,
+    }));
+  }
+  resz();
+  window.addEventListener("resize", resz);
+  const mouse = { x: -99999, y: -99999 };
+  window.addEventListener("pointermove", (e) => {
+    mouse.x = e.clientX * DPR; mouse.y = e.clientY * DPR;
+  }, { passive: true });
+  let running = true;
+  document.addEventListener("visibilitychange", () => {
+    running = !document.hidden;
+    if (running) requestAnimationFrame(loop);
+  });
+  const LINK = 130 * DPR, MJ = 240 * DPR;
+  function loop() {
+    if (!running) return;
+    ctx.clearRect(0, 0, W, H);
+    for (const n of nodes) {
+      n.x += n.vx; n.y += n.vy;
+      if (n.x < -20) n.x = W + 20; else if (n.x > W + 20) n.x = -20;
+      if (n.y < -20) n.y = H + 20; else if (n.y > H + 20) n.y = -20;
+      const dx = mouse.x - n.x, dy = mouse.y - n.y, d2 = dx * dx + dy * dy;
+      if (d2 < MJ * MJ) {
+        const dd = Math.sqrt(d2) || 1;
+        const f = (1 - Math.sqrt(d2) / MJ) * 0.022;
+        n.vx += (dx / dd) * f; n.vy += (dy / dd) * f;
+      }
+      n.vx *= 0.996; n.vy *= 0.996;
+    }
+    for (let i = 0; i < nodes.length; i++) {
+      for (let j = i + 1; j < nodes.length; j++) {
+        const a = nodes[i], b = nodes[j];
+        const dx = a.x - b.x, dy = a.y - b.y;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        if (d < LINK) {
+          ctx.strokeStyle = "rgba(120,140,255," + (0.15 * (1 - d / LINK)).toFixed(3) + ")";
+          ctx.lineWidth = 1;
+          ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+        }
+      }
+    }
+    for (const n of nodes) {
+      ctx.fillStyle = "rgba(34,211,238,0.75)";
+      ctx.beginPath(); ctx.arc(n.x, n.y, n.r, 0, 6.2832); ctx.fill();
+      ctx.fillStyle = "rgba(255,255,255,0.95)";
+      ctx.beginPath(); ctx.arc(n.x, n.y, n.r * 0.35, 0, 6.2832); ctx.fill();
+    }
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+})();
+
+// 7) skroll progress-bari (yuqorida holo chiziq)
+(function scrollProgress() {
+  const pb = document.getElementById("progressBar");
+  if (!pb) return;
+  let busy = false;
+  window.addEventListener(
+    "scroll",
+    () => {
+      if (busy) return;
+      busy = true;
+      requestAnimationFrame(() => {
+        const st = document.documentElement.scrollTop || document.body.scrollTop || 0;
+        const max = document.documentElement.scrollHeight - window.innerHeight;
+        pb.style.transform = "scaleX(" + (max > 0 ? Math.min(st / max, 1) : 0) + ")";
+        busy = false;
+      });
+    },
+    { passive: true }
+  );
+})();
+
+// 8) kursor yorug'ligi (silliq suzib boruvchi holo nur)
+(function cursorGlow() {
+  const g = document.getElementById("cursorGlow");
+  if (!g || reduceMotion || !window.matchMedia("(hover: hover) and (pointer: fine)").matches) return;
+  let tx = window.innerWidth / 2, ty = window.innerHeight / 2, cx = tx, cy = ty;
+  window.addEventListener("pointermove", (e) => {
+    tx = e.clientX; ty = e.clientY;
+    g.style.opacity = 1;
+  }, { passive: true });
+  document.documentElement.addEventListener("mouseleave", () => { g.style.opacity = 0; });
+  (function step() {
+    cx += (tx - cx) * 0.12;
+    cy += (ty - cy) * 0.12;
+    g.style.transform = "translate(" + cx.toFixed(1) + "px," + cy.toFixed(1) + "px)";
+    requestAnimationFrame(step);
+  })();
+})();
+
+// 9) o'zgaruvchan placeholder (chat kiritish maydoni)
+(function placeholders() {
+  const inp = document.getElementById("input");
+  if (!inp) return;
+  const list = [
+    "InomjonAI ga savol yozing...",
+    "Masalan: 'Python dastur yozib ber'",
+    "Masalan: 'kosmos rasmini yarat'",
+    "Masalan: 'video: quyosh botishi'",
+    "Tarjima qil: 'salom dunyo'",
+  ];
+  let i = 0;
+  if (reduceMotion) return;
+  setInterval(() => {
+    if (document.hidden || inp.value) return;
+    i = (i + 1) % list.length;
+    inp.placeholder = list[i];
+  }, 3200);
+})();
