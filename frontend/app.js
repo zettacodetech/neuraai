@@ -1003,7 +1003,7 @@ function bindTilt(el) {
     const px = (e.clientX - r.left) / r.width;
     const py = (e.clientY - r.top) / r.height;
     el.style.transform =
-      "perspective(900px) rotateX(" + ((0.5 - py) * 10).toFixed(2) + "deg) rotateY(" + ((px - 0.5) * 12).toFixed(2) + "deg) translateZ(10px)";
+      "perspective(1100px) rotateX(" + ((0.5 - py) * 16).toFixed(2) + "deg) rotateY(" + ((px - 0.5) * 18).toFixed(2) + "deg) translateZ(14px)";
     el.style.setProperty("--mx", px.toFixed(3));
     el.style.setProperty("--my", py.toFixed(3));
     el.querySelectorAll("[data-z]").forEach((c) => {

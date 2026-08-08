@@ -741,3 +741,72 @@ html.kb-open .layout { height: var(--kb, 100dvh); }
 .tilt3d:hover { border-color: rgba(143,123,255,0.45); }
 .chip, .btn-ghost, .new-chat, .head-btn { transition: transform 0.1s ease; }
 .chip:active, .btn-ghost:active, .new-chat:active, .head-btn:active { transform: translateY(2px); }
+
+/* ============ 7D — to'liq hologrammik qatlam ============ */
+:root {
+  --holo: conic-gradient(from 0deg, #22d3ee, #6d5cff, #ec4899, #fbbf24, #22d3ee);
+  --holo2: linear-gradient(120deg, #38bdf8 0%, #6d5cff 40%, #ec4899 70%, #ffd166 100%);
+}
+
+/* zarrachalar — yuqoriga suzuvchi neon chang */
+.particles { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.particles span {
+  position: absolute; left: var(--x); bottom: -12px; width: var(--s, 6px); height: var(--s, 6px);
+  border-radius: 50%; background: radial-gradient(circle, #7dd3fc, transparent 65%);
+  filter: blur(1px); opacity: 0;
+  animation: rise linear infinite; animation-duration: 16s; animation-delay: var(--d, 0s);
+}
+@keyframes rise {
+  0% { transform: translateY(0) scale(1); opacity: 0; }
+  10% { opacity: 0.85; }
+  85% { opacity: 0.45; }
+  100% { transform: translateY(-108vh) scale(1.5); opacity: 0; }
+}
+
+/* holografik pulslanuvchi ramka — barcha kartalarda */
+.welcome-card::before, .f-card::before, .plat::before, .m-card::before, .s-card::before, .step::before {
+  content: ""; position: absolute; inset: -1px; border-radius: inherit; padding: 1px;
+  background: var(--holo); background-size: 300% 300%;
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor; mask-composite: exclude;
+  opacity: 0; transition: opacity 0.3s; pointer-events: none;
+  animation: holo-ring 5s linear infinite;
+}
+.welcome-card:hover::before, .f-card:hover::before, .plat:hover::before, .m-card:hover::before, .s-card:hover::before, .step:hover::before {
+  opacity: 1;
+}
+@keyframes holo-ring { to { background-position: 300% 50%; } }
+
+/* neon-cyan asosiy tugmalar (holografik xrom) */
+.btn-primary, .l-cta, .accent-btn, .auth-submit, .send-btn, .tab.active, .ms-btn.active {
+  background: var(--holo2); background-size: 300% 300%;
+  animation: float-shift 5s ease infinite;
+  box-shadow: 0 4px 0 rgba(10,20,40,0.6), 0 12px 34px rgba(34,211,238,0.35), 0 0 24px rgba(34,211,238,0.15) !important;
+}
+.btn-primary:hover, .l-cta:hover, .accent-btn:hover, .auth-submit:hover {
+  box-shadow: 0 4px 0 rgba(10,20,40,0.6), 0 16px 44px rgba(34,211,238,0.5), 0 0 34px rgba(143,123,255,0.3) !important;
+}
+
+/* chiroyli ichki yaltirash (gloss) — tugmalar tepasida */
+.btn-primary::before, .l-cta::before, .auth-submit::before, .send-btn::before {
+  content: ""; position: absolute; inset: 2px 8px; height: 42%; border-radius: inherit;
+  background: linear-gradient(180deg, rgba(255,255,255,0.4), transparent);
+  opacity: 0.5; pointer-events: none;
+}
+
+/* kartalar hover — 7D chuqurlik + holo porlashi */
+.tilt3d:hover { box-shadow: 0 24px 70px rgba(0,0,0,0.55), 0 0 32px rgba(34,211,238,0.18); }
+.sec-title .accent, .grad-text {
+  background: var(--holo2); background-size: 300% 300%;
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: float-shift 4s ease infinite;
+}
+
+/* soz lam diverse moda — yangi 7Dda ham ishlatiladi */
+@media (max-width: 900px) {
+  .particles span { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .particles span, .welcome-card::before, .f-card::before, .plat::before, .m-card::before, .s-card::before, .step::before { animation: none !important; }
+}
