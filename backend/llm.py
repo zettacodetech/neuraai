@@ -68,6 +68,10 @@ def _resolve_gemini_model(name: str) -> str:
 
 LLM_TIMEOUT = float(os.environ.get("NEURA_LLM_TIMEOUT", "25"))
 
+# Lokal Ollama sekinroq (CPU) — uzoqroq kutamiz, lekin Railway proxy limitidan
+# oshmaydi (120s). Model iliq bo'lsa javob odatda 5-20s keladi.
+OLLAMA_TIMEOUT = float(os.environ.get("NEURA_OLLAMA_TIMEOUT", "110"))
+
 # OpenRouter kreditlari kam bo'lgani uchun chiqish tokenlarini cheklaymiz.
 OPENROUTER_MAX_TOKENS = int(os.environ.get("OPENROUTER_MAX_TOKENS", "450"))
 
@@ -323,7 +327,7 @@ class _OllamaProvider:
             headers={"Content-Type": "application/json"},
         )
         try:
-            with urllib.request.urlopen(req, timeout=LLM_TIMEOUT) as r:
+            with urllib.request.urlopen(req, timeout=OLLAMA_TIMEOUT) as r:
                 data = json.loads(r.read().decode())
             return data.get("message", {}).get("content")
         except Exception:
@@ -363,7 +367,7 @@ class _OllamaProvider:
             data=json.dumps(payload).encode(),
             headers={"Content-Type": "application/json"},
         )
-        with urllib.request.urlopen(req, timeout=LLM_TIMEOUT) as r:
+        with urllib.request.urlopen(req, timeout=OLLAMA_TIMEOUT) as r:
             for line in _iter_sse_lines(r):
                 line = line.strip()
                 if not line:
