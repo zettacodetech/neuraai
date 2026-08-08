@@ -25,3 +25,5 @@ pyrightconfig.json
 
 # Eski APK nusxasi (yangisi frontend/apk/neuraai.apk)
 frontend/apk/neuraai-v1.1.0.apk
+.clivenv/
+.aider.chat.history.md

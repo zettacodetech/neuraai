@@ -1,0 +1,6 @@
+"""python -m neura_cli ni ishga tushiradi."""
+
+from neura_cli.main import cli
+
+if __name__ == "__main__":
+    cli()
