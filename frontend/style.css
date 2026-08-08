@@ -731,7 +731,13 @@ html.kb-open .layout { height: var(--kb, 100dvh); }
 .send-btn { box-shadow: 0 3px 0 rgba(20,15,45,0.55), 0 8px 22px rgba(109,92,255,0.4); }
 .send-btn:active { transform: translateY(2px) scale(1.02); }
 
-/* sik kamarayish rejimi — 3D o'chiriladi */
+/* to'liq 3D — ikkinchi qatlam */
 @media (prefers-reduced-motion: reduce) {
   .tilt3d, .welcome-logo, .orb { animation: none !important; transition: none !important; }
 }
+.welcome-card span { display: inline-block; font-size: 1.7rem; margin-top: 2px; }
+.f-ico, .p-ico, .s-ico { display: block; }
+.tilt3d { backface-visibility: hidden; }
+.tilt3d:hover { border-color: rgba(143,123,255,0.45); }
+.chip, .btn-ghost, .new-chat, .head-btn { transition: transform 0.1s ease; }
+.chip:active, .btn-ghost:active, .new-chat:active, .head-btn:active { transform: translateY(2px); }

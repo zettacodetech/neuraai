@@ -332,8 +332,8 @@ function showWelcome() {
   ];
   items.forEach((it) => {
     const card = document.createElement("button");
-    card.className = "welcome-card";
-    card.innerHTML = "<span>" + it.e + "</span><b>" + it.t + "</b><small>" + it.d + "</small>";
+    card.className = "welcome-card tilt3d";
+    card.innerHTML = "<span data-z='28'>" + it.e + "</span><b>" + it.t + "</b><small>" + it.d + "</small>";
     card.onclick = () => { if (it.art) genArt(it.art); else if (it.file) fileInput.click(); else send(it.q); };
     grid.appendChild(card);
   });
