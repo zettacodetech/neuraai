@@ -19,48 +19,11 @@ const chatApp = document.getElementById("chatApp");
 const modelSwitch = document.getElementById("modelSwitch");
 const modelStatus = document.getElementById("modelStatus");
 
-const authBackdrop = document.getElementById("authBackdrop");
-const modalClose = document.getElementById("modalClose");
-const modalTitle = document.getElementById("modalTitle");
-const modalSub = document.getElementById("modalSub");
-const authForm = document.getElementById("authForm");
-const authError = document.getElementById("authError");
-const authSubmit = document.getElementById("authSubmit");
-const regFields = document.getElementById("regFields");
-const fName = document.getElementById("fName");
-const fEmail = document.getElementById("fEmail");
-const fPassword = document.getElementById("fPassword");
-
-const aboutBackdrop = document.getElementById("aboutBackdrop");
-const aboutClose = document.getElementById("aboutClose");
 const aboutBtn = document.getElementById("aboutBtn");
-const keyBackdrop = document.getElementById("keyBackdrop");
-const keyClose = document.getElementById("keyClose");
 const keyBtn = document.getElementById("apiKeyBtn");
-const keyCreateBtn = document.getElementById("keyCreateBtn");
-const keyCopyBtn = document.getElementById("keyCopyBtn");
-const keyRevokeBtn = document.getElementById("keyRevokeBtn");
-const keyError = document.getElementById("keyError");
-const apiKeyBox = document.getElementById("apiKeyBox");
+const themeBtn = document.getElementById("themeBtn");
+const micBtn = document.getElementById("micBtn");
 const loginTopBtn = document.getElementById("loginTopBtn");
-
-const profileBackdrop = document.getElementById("profileBackdrop");
-const profileClose = document.getElementById("profileClose");
-const profileAvatar = document.getElementById("profileAvatar");
-const profileSub = document.getElementById("profileSub");
-const profileForm = document.getElementById("profileForm");
-const profileError = document.getElementById("profileError");
-const profileSave = document.getElementById("profileSave");
-const pName = document.getElementById("pName");
-const pSurname = document.getElementById("pSurname");
-const pEmail = document.getElementById("pEmail");
-const pPhone = document.getElementById("pPhone");
-const passForm = document.getElementById("passForm");
-const passError = document.getElementById("passError");
-const passSave = document.getElementById("passSave");
-const pOldPass = document.getElementById("pOldPass");
-const pNewPass = document.getElementById("pNewPass");
-const profileLogout = document.getElementById("profileLogout");
 
 /* ================= holat ================= */
 
@@ -165,13 +128,65 @@ modelSwitch.addEventListener("click", (e) => {
 /* ================= xabarlar ================= */
 
 function renderText(text) {
-  const parts = text.split(/```/);
+  const parts = String(text).split(/```/);
   let html = "";
   parts.forEach((p, i) => {
     if (i % 2 === 1) html += "<pre>" + esc(p) + "</pre>";
-    else html += esc(p).replace(/\n/g, "<br>");
+    else html += mdRender(p);
   });
   return html;
+}
+
+function mdRender(raw) {
+  const lines = raw.split("\n");
+  let html = "";
+  let listTag = null;
+  let table = null;
+  const flushList = () => {
+    if (listTag) { html += "</" + listTag + ">"; listTag = null; }
+  };
+  const flushTable = () => {
+    if (table) { html += "</table>"; table = null; }
+  };
+  for (const rawLine of lines) {
+    const line = rawLine.replace(/\s+$/, "");
+    if (!line.trim()) { flushList(); flushTable(); continue; }
+    if (line.trim() !== "|" && /^\s*\|.*\|\s*$/.test(line)) {
+      flushList();
+      if (!table) table = "<table>";
+      const cells = line.split("|").slice(1, -1).map((c) => c.trim());
+      if (cells.every((c) => /^:?-{2,}:?$/.test(c))) continue;
+      table += "<tr>" + cells.map((c) => "<td>" + mdInline(c) + "</td>").join("") + "</tr>";
+      continue;
+    }
+    flushTable();
+    const h = line.match(/^(#{1,3})\s+(.*)$/);
+    if (h) { flushList(); html += "<h" + h[1].length + ">" + mdInline(h[2]) + "</h" + h[1].length + ">"; continue; }
+    const ul = line.match(/^\s*[-*]\s+(.*)$/);
+    const ol = line.match(/^\s*\d+[.)]\s+(.*)$/);
+    const li = (ul || ol || [])[1];
+    const tag = ul ? "ul" : ol ? "ol" : null;
+    if (tag) {
+      if (listTag !== tag) { flushList(); html += "<" + tag + ">"; listTag = tag; }
+      html += "<li>" + mdInline(li) + "</li>";
+      continue;
+    }
+    flushList();
+    html += "<p>" + mdInline(line) + "</p>";
+  }
+  flushList();
+  flushTable();
+  return html;
+}
+
+function mdInline(t) {
+  let s = esc(t);
+  s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+  s = s.replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>");
+  s = s.replace(/__([^_]+)__/g, "<b>$1</b>");
+  s = s.replace(/(^|[^*])\*([^*\s][^*]*)\*/g, "$1<i>$2</i>");
+  s = s.replace(/`([^`]+)`/g, "<code>$1</code>");
+  return s;
 }
 
 /* ============ jonli effektlar (99999D) ============ */
@@ -405,12 +420,14 @@ function showWelcome() {
     { e: "🌍", t: "Qidiruv", d: "Internetdan yangi ma'lumot", q: "O'zbekiston bo'yicha so'nggi kunlardagi muhim yangiliklarni topib ber" },
     { e: "🎨", t: "Rasm yaratish", d: "Prompt bo'yicha rasm chizadi", art: "image" },
     { e: "🎬", t: "Video yaratish", d: "Matnni videoga aylantiradi", art: "video" },
+    { e: "🎵", t: "Musiqa yaratish", d: "Tavsif bo'yicha musiqa yaratadi", genType: "music" },
+    { e: "🎙️", t: "Ovoz yaratish", d: "Matnni ovozga aylantiradi", genType: "voice" },
   ];
   items.forEach((it) => {
     const card = document.createElement("button");
     card.className = "welcome-card tilt3d";
     card.innerHTML = "<span data-z='28'>" + it.e + "</span><b>" + it.t + "</b><small>" + it.d + "</small>";
-    card.onclick = () => { if (it.art) genArt(it.art); else if (it.file) fileInput.click(); else send(it.q); };
+    card.onclick = () => { if (it.art) genArt(it.art); else if (it.genType) genAudio(it.genType); else if (it.file) fileInput.click(); else send(it.q); };
     grid.appendChild(card);
   });
   w.appendChild(grid);
@@ -519,6 +536,7 @@ async function send(text) {
               };
               ai.bubble.appendChild(copy);
               flashRow(ai.row);
+              if (document.hidden) ding();
               if (evt.message_id) addFeedback(ai.row, evt.message_id);
             }
             if (sseConv !== null) currentConv = sseConv;
@@ -663,13 +681,21 @@ function renderConvList(items) {
   convList.innerHTML = "";
   convEmpty.style.display = items.length ? "none" : "block";
   items.forEach((c) => {
-    const btn = document.createElement("button");
+    const btn = document.createElement("div");
     btn.className = "conv-item" + (currentConv === c.id ? " active" : "");
     btn.innerHTML =
       '<span class="conv-ico"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>' +
       '<span class="conv-info"><span class="conv-title">' + esc(c.title) + "</span>" +
-      '<span class="conv-meta">' + c.msg_count + " xabar · " + fmtDate(c.created_at) + "</span></span>";
-    btn.onclick = () => openConversation(c.id);
+      '<span class="conv-meta">' + c.msg_count + " xabar · " + fmtDate(c.created_at) + "</span></span>" +
+      '<span class="conv-actions">' +
+      '<button class="conv-act" title="Nomlash" data-act="rename"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/></svg></button>' +
+      '<button class="conv-act" title="TXT yuklab olish" data-act="export"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg></button>' +
+      '<button class="conv-act danger" title="O\'chirish" data-act="del"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button>' +
+      "</span>";
+    btn.querySelector(".conv-info").onclick = () => openConversation(c.id);
+    btn.querySelector('[data-act="rename"]').onclick = (e) => { e.stopPropagation(); renameConversation(c.id); };
+    btn.querySelector('[data-act="export"]').onclick = (e) => { e.stopPropagation(); exportConversation(c.id); };
+    btn.querySelector('[data-act="del"]').onclick = (e) => { e.stopPropagation(); deleteConversation(c.id); };
     convList.appendChild(btn);
   });
   updateStats(items);
@@ -741,76 +767,7 @@ function newChat() {
 function openAuth(mode = "") {
   location.href = mode === "register" ? "/register" : "/login";
 }
-function closeAuth() { authBackdrop.hidden = true; }
-
-function setMode(mode) {
-  document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.mode === mode));
-  regFields.hidden = mode !== "register";
-  authSubmit.textContent = mode === "register" ? "Ro'yxatdan o'tish" : "Kirish";
-  modalTitle.textContent = mode === "register" ? "Hisob yarating" : "Xush kelibsiz!";
-  modalSub.textContent = mode === "register" ? "AI ishlatish uchun 1 daqiqada ro'yxatdan o'ting" : "AI ishlatish uchun hisobingizga kiring";
-}
-
-authForm.onsubmit = async (e) => {
-  e.preventDefault();
-  const mode = document.querySelector(".tab.active").dataset.mode;
-  const email = fEmail.value.trim().toLowerCase();
-  const password = fPassword.value;
-  authError.textContent = "";
-  authSubmit.disabled = true;
-
-  try {
-    let data;
-    if (mode === "register") {
-      if (!email || !email.includes("@") || !email.includes(".")) {
-        authError.textContent = "To'g'ri email kiriting (masalan: ism@mail.com)";
-        authSubmit.disabled = false;
-        return;
-      }
-      if (!fName.value.trim()) {
-        authError.textContent = "Ismingizni kiriting";
-        authSubmit.disabled = false;
-        return;
-      }
-      data = await api("/api/register", {
-        method: "POST",
-        body: JSON.stringify({
-          email, password,
-          name: fName.value.trim(),
-          client_id: CLIENT_ID,
-        }),
-      });
-    } else {
-      data = await api("/api/login", {
-        method: "POST",
-        body: JSON.stringify({ email, password, client_id: CLIENT_ID }),
-      });
-    }
-    me = {
-      token: data.token,
-      username: data.username,
-      name: data.name,
-      surname: (data.surname || ""),
-      email: data.email || "",
-    };
-    localStorage.setItem("neura_token", data.token);
-    try {
-      const u = await api("/api/me?token=" + encodeURIComponent(data.token));
-      me.name = u.name || me.name;
-      me.surname = u.surname || "";
-      me.email = u.email || "";
-      me.phone = u.phone || "";
-    } catch (e) {}
-    cacheUser(me);
-    closeAuth();
-    renderUser();
-    showChat();
-    newChat();
-  } catch (err) {
-    authError.textContent = err.message;
-  }
-  authSubmit.disabled = false;
-};
+function closeAuth() {}
 
 function renderUser() {
   if (!me) {
@@ -847,170 +804,25 @@ function logout() {
   if (loginTopBtn) loginTopBtn.style.display = "";
 }
 
+function openProfile() {
+  if (!me) { openAuth(); return; }
+  location.href = "/profile";
+}
+function closeProfile() {}
+
 /* ================= API kaliti / Haqida ================= */
 
 function openAbout() {
-  if (aboutBtn) aboutBackdrop.hidden = false;
+  location.href = "/about";
 }
 
-async function openKeyModal() {
+function openKeyModal() {
   if (!me) {
     openAuth();
     return;
   }
-  keyBackdrop.hidden = false;
-  keyError.textContent = "";
-  const keyMake = document.getElementById("keyMake");
-  const keyView = document.getElementById("keyView");
-  document.getElementById("keyName").value = "";
-  document.querySelectorAll(".key-model input[data-m]").forEach((c) => {
-    c.checked = c.dataset.m === "fast";
-  });
-  try {
-    const data = await api("/api/key?token=" + encodeURIComponent(me.token));
-    if (data.key) {
-      keyMake.hidden = true;
-      keyView.hidden = false;
-      apiKeyBox.innerHTML = '<code id="apiKeyVal">' + esc(data.key) + "</code>";
-      const meta = document.getElementById("keyMeta");
-      const models = (data.models && data.models.length)
-        ? data.models.map((m) => m === "think" ? "🧠 Aqlli" : "⚡ Tez").join(" · ")
-        : "⚡ Tez";
-      meta.innerHTML = "Nomi: <b>" + esc(data.name || "Bosh kalit") + "</b> &nbsp;·&nbsp; Modellar: <b>" + models + "</b>";
-    } else {
-      keyMake.hidden = false;
-      keyView.hidden = true;
-    }
-  } catch (e) {
-    keyError.textContent = e.message;
-  }
+  location.href = "/api-key";
 }
-
-keyCreateBtn.onclick = async () => {
-  if (!me) { closeAuth(); openAuth(); return; }
-  const name = document.getElementById("keyName").value.trim();
-  const models = Array.from(document.querySelectorAll(".key-model input[data-m]:checked"))
-    .map((c) => c.dataset.m);
-  if (!models.length) {
-    keyError.textContent = "Kamida bitta modelni tanlang.";
-    return;
-  }
-  keyCreateBtn.disabled = true;
-  keyError.textContent = "";
-  try {
-    const data = await api("/api/key/create", {
-      method: "POST",
-      body: JSON.stringify({ token: me.token, name: name || "Bosh kalit", models }),
-    });
-    document.getElementById("keyMake").hidden = true;
-    document.getElementById("keyView").hidden = false;
-    apiKeyBox.innerHTML = '<code id="apiKeyVal">' + esc(data.key) + "</code>";
-    const meta = document.getElementById("keyMeta");
-    const modelsTxt = (data.models || []).map((m) => m === "think" ? "🧠 Aqlli" : "⚡ Tez").join(" · ");
-    meta.innerHTML = "Nomi: <b>" + esc(data.name) + "</b> &nbsp;·&nbsp; Modellar: <b>" + modelsTxt + "</b>";
-    navigator.clipboard && navigator.clipboard.writeText(data.key).catch(() => {});
-  } catch (e) {
-    keyError.textContent = e.message;
-  }
-  keyCreateBtn.disabled = false;
-};
-
-keyCopyBtn.onclick = () => {
-  if (!me) return;
-  const val = document.getElementById("apiKeyVal");
-  if (val && navigator.clipboard) navigator.clipboard.writeText(val.textContent);
-};
-
-keyRevokeBtn.onclick = async () => {
-  if (!me) return;
-  try {
-    await api("/api/key?token=" + encodeURIComponent(me.token), { method: "DELETE" });
-    document.getElementById("keyView").hidden = true;
-    document.getElementById("keyMake").hidden = false;
-    document.getElementById("keyName").value = "";
-    keyError.textContent = "Kalit bekor qilindi.";
-  } catch (e) {
-    keyError.textContent = e.message;
-  }
-};
-
-/* ================= profil ================= */
-
-function openProfile() {
-  if (!me) { openAuth(); return; }
-  profileError.textContent = "";
-  passError.textContent = "";
-  pOldPass.value = "";
-  pNewPass.value = "";
-  pName.value = me.name || me.username || "";
-  pSurname.value = me.surname || "";
-  pEmail.value = me.email || "";
-  pPhone.value = me.phone || "";
-  const initial = (me.name || me.username || "?").charAt(0).toUpperCase();
-  profileAvatar.textContent = initial;
-  profileSub.textContent = "@" + (me.username || "").toLowerCase() + (me.offline ? " · oflayn rejimda" : "");
-  profileBackdrop.hidden = false;
-}
-
-function closeProfile() { profileBackdrop.hidden = true; }
-
-profileForm.onsubmit = async (e) => {
-  e.preventDefault();
-  profileError.textContent = "";
-  if (!me) { openAuth(); return; }
-  profileSave.disabled = true;
-  try {
-    const data = await api("/api/profile", {
-      method: "POST",
-      body: JSON.stringify({
-        token: me.token,
-        name: pName.value.trim(),
-        surname: pSurname.value.trim(),
-        phone: pPhone.value.trim(),
-      }),
-    });
-    me.name = data.name;
-    me.surname = data.surname || "";
-    me.phone = data.phone || "";
-    me.email = data.email || "";
-    cacheUser(me);
-    renderUser();
-    profileError.textContent = "✅ Ma'lumotlar saqlandi";
-  } catch (err) {
-    profileError.textContent = err.message;
-  }
-  profileSave.disabled = false;
-};
-
-passForm.onsubmit = async (e) => {
-  e.preventDefault();
-  passError.textContent = "";
-  if (!me) { openAuth(); return; }
-  passSave.disabled = true;
-  try {
-    await api("/api/change-password", {
-      method: "POST",
-      body: JSON.stringify({ token: me.token, old_password: pOldPass.value, new_password: pNewPass.value }),
-    });
-    pOldPass.value = "";
-    pNewPass.value = "";
-    passError.textContent = "✅ Parol o'zgartirildi";
-  } catch (err) {
-    passError.textContent = err.message;
-  }
-  passSave.disabled = false;
-};
-
-profileLogout.onclick = async () => {
-  if (!me) { closeProfile(); return; }
-  await api("/api/logout?token=" + encodeURIComponent(me.token)).catch(() => {});
-  logout();
-};
-
-profileClose.onclick = closeProfile;
-profileBackdrop.addEventListener("click", (e) => {
-  if (e.target === profileBackdrop) closeProfile();
-});
 
 /* ================= landing interaktiv ================= */
 
@@ -1053,6 +865,7 @@ chipsBox.addEventListener("click", (e) => {
   if (!chip) return;
   if (chip.dataset.action === "image") fileInput.click();
   else if (chip.dataset.gen) genArt(chip.dataset.gen);
+  else if (chip.dataset.genType) genAudio(chip.dataset.genType);
   else send(chip.dataset.q);
 });
 
@@ -1068,17 +881,172 @@ menuBtn.onclick = () => {
   overlay.classList.toggle("show");
 };
 overlay.onclick = closeSidebar;
-modalClose.onclick = closeAuth;
-authBackdrop.addEventListener("click", (e) => { if (e.target === authBackdrop) closeAuth(); });
-document.querySelectorAll(".tab").forEach((t) => t.addEventListener("click", () => setMode(t.dataset.mode)));
 
-loginTopBtn.onclick = () => openAuth("login");
+if (loginTopBtn) loginTopBtn.onclick = () => openAuth("login");
 aboutBtn.onclick = openAbout;
-aboutClose.onclick = () => { aboutBackdrop.hidden = true; };
-aboutBackdrop.addEventListener("click", (e) => { if (e.target === aboutBackdrop) aboutBackdrop.hidden = true; });
 keyBtn.onclick = openKeyModal;
-keyClose.onclick = () => { keyBackdrop.hidden = true; };
-keyBackdrop.addEventListener("click", (e) => { if (e.target === keyBackdrop) keyBackdrop.hidden = true; });
+if (themeBtn) themeBtn.onclick = toggleTheme;
+
+/* ================= mavzu (dark/light) ================= */
+
+const THEME_KEY = "neura_theme";
+const themeIcon = document.getElementById("themeIcon");
+
+function applyTheme(t) {
+  document.documentElement.dataset.theme = t;
+  localStorage.setItem(THEME_KEY, t);
+  if (themeIcon) themeIcon.setAttribute("d", t === "light"
+    ? "M12 3v2m0 14v2M3 12h2m14 0h2M5.6 5.6l1.4 1.4m10 10l1.4 1.4M18.4 5.6L17 7m-10 10l-1.4 1.4M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0z"
+    : "M12 3a9 9 0 1 0 9 9c0-.46-.04-.92-.1-1.36a5.39 5.39 0 0 1-4.4 2.26 5.4 5.4 0 0 1-3.14-9.8c-.44-.06-.9-.1-1.36-.1z");
+}
+
+function toggleTheme() {
+  const cur = document.documentElement.dataset.theme === "light" ? "dark" : "light";
+  applyTheme(cur);
+}
+
+applyTheme(localStorage.getItem(THEME_KEY) || (window.matchMedia && matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark"));
+
+/* ================= ovozli kiritish ================= */
+
+let recognizing = false;
+const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+if (micBtn && SpeechRec) {
+  const rec = new SpeechRec();
+  rec.lang = "uz-UZ";
+  rec.interimResults = false;
+  micBtn.onclick = () => {
+    if (recognizing) { recognizing = false; rec.stop(); micBtn.classList.remove("rec"); return; }
+    recognizing = true;
+    micBtn.classList.add("rec");
+    input.placeholder = "Gapiring...";
+    try { rec.start(); } catch (e) {}
+  };
+  rec.onresult = (ev) => {
+    const t = ev.results[0][0].transcript.trim();
+    if (t) { input.value = t; autoResize(); send(t); }
+  };
+  rec.onend = () => {
+    recognizing = false;
+    micBtn.classList.remove("rec");
+    input.placeholder = "InomjonAI ga so'rovingizni yozing...";
+  };
+  rec.onerror = () => {
+    recognizing = false;
+    micBtn.classList.remove("rec");
+    input.placeholder = "InomjonAI ga so'rovingizni yozing...";
+  };
+} else if (micBtn) {
+  micBtn.hidden = true;
+}
+
+/* ================= audio generatsiya (musiqa / ovoz) ================= */
+
+async function genAudio(kind) {
+  if (!me) { openAuth(); return; }
+  const label = kind === "music" ? "🎵 Musiqa uchun tavsif kiriting (masalan: \"sekin lirik pianino\")" : "🎙️ Ovoz uchun matn kiriting";
+  const q = prompt(label);
+  if (!q || !q.trim()) return;
+  if (sending) return;
+  sending = true;
+  sendBtn.disabled = true;
+  hideChips();
+  qMessage("user", (kind === "music" ? "🎵 Musiqa: " : "🎙️ Ovoz: ") + q.trim());
+  const typing = typingRow();
+  try {
+    const res = await fetch("/api/generate-" + kind, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(kind === "music"
+        ? { token: me.token, prompt: q.trim(), title: q.trim().slice(0, 60) }
+        : { token: me.token, prompt: q.trim() }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw Object.assign(new Error(data.error || "xato"), { status: res.status });
+    typing.remove();
+    qAudio(data.audio_url);
+    confettiBurst();
+  } catch (e) {
+    typing.remove();
+    qMessage("ai", "⚠️ Generatsiya xatosi: " + (e.message || "qayta urinib ko'ring"));
+  }
+  sending = false;
+  sendBtn.disabled = false;
+}
+
+function qAudio(url) {
+  if (!url) return;
+  const row = document.createElement("div");
+  row.className = "msg-row ai";
+  row.innerHTML =
+    '<div class="msg-bubble ai"><div class="msg-text">🔊 Tayyor:</div>' +
+    '<audio controls preload="none" class="audio-player" src="' + esc(url) + '"></audio></div>';
+  chat.appendChild(row);
+  chat.scrollTo({ top: chat.scrollHeight, behavior: "smooth" });
+  return row;
+}
+
+/* ================= suhbat amallari (nomlash / o'chirish / eksport) ================= */
+
+async function renameConversation(id) {
+  if (!me) return;
+  const c = convItems.find((x) => x.id === id);
+  const name = prompt("Suhbat nomini kiriting:", c ? c.title : "");
+  if (!name || !name.trim()) return;
+  try {
+    await api("/api/rename", {
+      method: "POST",
+      body: JSON.stringify({ token: me.token, conversation_id: id, name: name.trim() }),
+    });
+    refreshConversations();
+  } catch (e) { alert(e.message); }
+}
+
+async function deleteConversation(id) {
+  if (!me) return;
+  if (!confirm("Bu suhbatni o'chirishni xohlaysizmi?")) return;
+  try {
+    await api("/api/conversations/" + id + "?token=" + encodeURIComponent(me.token), { method: "DELETE" });
+    if (currentConv === id) newChat();
+    else refreshConversations();
+  } catch (e) { alert(e.message); }
+}
+
+function exportConversation(id) {
+  if (!me) return;
+  const c = convItems.find((x) => x.id === id);
+  api("/api/conversations/" + id + "?token=" + encodeURIComponent(me.token)).then((data) => {
+    const txt = (c ? c.title + "\n" : "") + data.items
+      .map((m) => (m.role === "assistant" ? "AI: " : "Siz: ") + m.text)
+      .join("\n\n");
+    const blob = new Blob([txt], { type: "text/plain;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = (c ? c.title : "suhbat") + ".txt";
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }).catch(() => {});
+}
+
+/* ================= bildirishnoma ovozi ================= */
+
+let audioCtx = null;
+function ding() {
+  try {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === "suspended") audioCtx.resume();
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.type = "sine";
+    o.frequency.value = 880;
+    g.gain.setValueAtTime(0.0001, audioCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.12, audioCtx.currentTime + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.35);
+    o.connect(g).connect(audioCtx.destination);
+    o.start();
+    o.stop(audioCtx.currentTime + 0.4);
+  } catch (e) {}
+}
 
 /* ================= boshlash ================= */
 

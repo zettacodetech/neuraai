@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#05060f" />
+  <link rel="manifest" href="/static/manifest.json" />
+  <title>Profil — InomjonAI</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <style>
+    .auth-page { min-height: 100dvh; display: flex; flex-direction: column; align-items: center; justify-content: center;
+      padding: 18px; position: relative; z-index: 1; }
+    .auth-card { width: 100%; max-width: 560px; border-radius: 24px; padding: 30px 26px;
+      animation: modal-pop 0.5s cubic-bezier(0.22, 1.61, 0.36, 1); }
+    .auth-logo { width: 62px; height: 62px; border-radius: 20px; margin: 0 auto 14px; overflow: hidden;
+      display: grid; place-items: center; box-shadow: 0 14px 40px rgba(109,92,255,0.5);
+      animation: float 5s ease-in-out infinite; }
+    .auth-logo img { width: 100%; height: 100%; object-fit: cover; }
+    .auth-card h1 { text-align: center; margin: 0 0 6px; font-size: 1.6rem; font-weight: 800; }
+    .auth-sub { text-align: center; color: var(--muted); margin: 0 0 22px; font-size: 0.92rem; line-height: 1.5; }
+    .auth-err { display: none; background: rgba(248,113,113,0.12); border: 1px solid rgba(248,113,113,0.35);
+      color: #fca5a5; border-radius: 12px; padding: 10px 14px; font-size: 0.85rem; margin-bottom: 14px; }
+    .auth-ok { display: none; background: rgba(52,211,153,0.12); border: 1px solid rgba(52,211,153,0.35);
+      color: #6ee7b7; border-radius: 12px; padding: 10px 14px; font-size: 0.85rem; margin-bottom: 14px; }
+    .auth-home { display: flex; justify-content: center; margin-top: 16px; font-size: 0.85rem; gap: 18px; }
+    .auth-home a { color: var(--muted); text-decoration: none; display: inline-flex; gap: 6px; align-items: center; }
+    .auth-home a:hover { color: var(--text); }
+    .auth-submit { width: 100%; padding: 14px; border-radius: 14px; font-size: 1rem; font-weight: 700;
+      background: var(--grad); color: #fff; border: none; cursor: pointer; transition: transform 0.2s; }
+    .auth-submit:hover { transform: translateY(-2px); }
+    .auth-submit:active { transform: scale(0.97); }
+    .auth-submit:disabled { opacity: 0.6; transform: none; }
+    .ghost-danger { width: 100%; padding: 13px; border-radius: 13px; font-weight: 600; margin-top: 10px;
+      border: 1px solid rgba(248,113,113,0.35); color: #f87171; background: rgba(248,113,113,0.07); cursor: pointer; }
+    .ghost-danger:hover { background: rgba(248,113,113,0.15); }
+    .stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 4px 0 16px; }
+    .stat-cell { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 13px; text-align: center; }
+    .stat-cell b { display: block; font-size: 1.5rem; background: var(--grad); -webkit-background-clip: text;
+      background-clip: text; -webkit-text-fill-color: transparent; }
+    .stat-cell span { color: var(--muted); font-size: 0.76rem; }
+    .stat-row { display: flex; justify-content: space-between; align-items: center; gap: 10px;
+      border-bottom: 1px solid var(--border); padding: 8px 2px; font-size: 0.88rem; color: var(--text); }
+    .stat-row small { color: var(--muted); }
+    .bar { height: 6px; border-radius: 999px; background: var(--panel2); overflow: hidden; flex: 1; max-width: 120px; }
+    .bar i { display: block; height: 100%; background: var(--grad); border-radius: 999px; }
+    .profile-divider { display: flex; align-items: center; gap: 12px; margin: 20px 0 14px;
+      color: var(--muted); font-size: 0.8rem; font-weight: 600; }
+    .profile-divider::before, .profile-divider::after { content: ""; flex: 1; height: 1px; background: linear-gradient(90deg, transparent, var(--border)); }
+    .profile-divider::after { background: linear-gradient(90deg, var(--border), transparent); }
+    @media (max-width: 520px) { .stat-grid { grid-template-columns: 1fr 1fr; } }
+  </style>
+</head>
+<body>
+  <div class="aurora" aria-hidden="true">
+    <span class="orb o1"></span>
+    <span class="orb o2"></span>
+    <span class="orb o3"></span>
+    <span class="grid-line"></span>
+    <canvas id="neuralNet"></canvas>
+    <div class="particles">
+      <span style="--x:12%;--d:0s;--s:5px;--c:#7dd3fc"></span>
+      <span style="--x:30%;--d:4s;--s:4px;--c:#c4b5fd"></span>
+      <span style="--x:55%;--d:8s;--s:6px;--c:#67e8f9"></span>
+      <span style="--x:75%;--d:2s;--s:3px;--c:#f0abfc"></span>
+      <span style="--x:90%;--d:6s;--s:5px;--c:#7dd3fc"></span>
+    </div>
+  </div>
+  <main class="auth-page">
+    <div class="auth-card glass">
+      <div class="auth-logo"><img src="/static/icons/logo.png" alt="InomjonAI" /></div>
+      <h1>Profil</h1>
+      <p class="auth-sub" id="profileSub">...</p>
+
+      <div class="auth-err" id="profileErr"></div>
+      <div class="auth-ok" id="profileOk"></div>
+
+      <form id="profileForm" novalidate>
+        <div class="profile-divider">👤 Shaxsiy ma'lumotlar</div>
+        <div class="profile-grid block">
+          <div class="field"><label for="pName">Ism</label>
+            <input id="pName" type="text" placeholder="Ismingiz" maxlength="40" /></div>
+          <div class="field"><label for="pSurname">Familiya</label>
+            <input id="pSurname" type="text" placeholder="Familiya" maxlength="40" /></div>
+        </div>
+        <div class="field"><label for="pEmail">Email</label>
+          <input id="pEmail" type="email" disabled placeholder="ism@mail.com" /></div>
+        <div class="field"><label for="pPhone">Telefon</label>
+          <input id="pPhone" type="tel" placeholder="+998 90 123 45 67" maxlength="30" /></div>
+        <button class="auth-submit" id="profileSave" type="submit">Saqlash</button>
+      </form>
+
+      <div class="profile-divider">📊 Statistikangiz</div>
+      <div class="stat-grid" id="statsGrid">
+        <div class="stat-cell"><b>–</b><span>Xabarlar</span></div>
+        <div class="stat-cell"><b>–</b><span>Suhbatlar</span></div>
+        <div class="stat-cell"><b>–</b><span>Baholangan</span></div>
+      </div>
+      <div id="statsDetail"></div>
+
+      <div class="profile-divider">🔒 Parolni o'zgartirish</div>
+      <form id="passForm" novalidate>
+        <div class="field"><label for="pOldPass">Eski parol</label>
+          <input id="pOldPass" type="password" placeholder="••••••••" autocomplete="current-password"/></div>
+        <div class="field"><label for="pNewPass">Yangi parol</label>
+          <input id="pNewPass" type="password" placeholder="Kamida 4 belgi" autocomplete="new-password"/></div>
+        <button class="ghost-btn" id="passSave" type="submit" style="width:100%">Parolni yangilash</button>
+      </form>
+
+      <button class="ghost-danger" id="profileLogout">Chiqish</button>
+      <div class="auth-home">
+        <a href="/">← Chatga qaytish</a>
+        <a href="/api-key">🔑 API kalit</a>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    const token = localStorage.getItem("neura_token");
+    const CLIENT_ID = localStorage.getItem("neura_uid") || "guest";
+
+    function showOk(el, txt) { el.textContent = txt; el.style.display = "block"; }
+    function showErr(el, txt) { el.textContent = txt; el.style.display = "block"; }
+
+    async function apiFetch(tpath, opts) {
+      const res = await fetch(tpath, opts);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw Object.assign(new Error(data.error || "xato"), { status: res.status });
+      return data;
+    }
+
+    if (!token) { location.href = "/login"; }
+    else {
+      const profileErr = document.getElementById("profileErr");
+      const profileOk = document.getElementById("profileOk");
+      apiFetch("/api/me?token=" + encodeURIComponent(token)).then(async (u) => {
+        document.getElementById("profileSub").textContent = "@" + u.username;
+        document.getElementById("pName").value = u.name || u.username || "";
+        document.getElementById("pSurname").value = u.surname || "";
+        document.getElementById("pEmail").value = u.email || "";
+        document.getElementById("pPhone").value = u.phone || "";
+        localStorage.setItem("neura_user", JSON.stringify(u));
+        try {
+          const st = await apiFetch("/api/stats?token=" + encodeURIComponent(token));
+          document.querySelector("#statsGrid .stat-cell:nth-child(1) b").textContent = st.messages;
+          document.querySelector("#statsGrid .stat-cell:nth-child(2) b").textContent = st.conversations;
+          document.querySelector("#statsGrid .stat-cell:nth-child(3) b").textContent = st.rated;
+          const srcLabels = { intent: "Tezkor", code: "Kod", knowledge: "Bilim", websearch: "Internet", llm: "AI", fallback: "Zaxira", generation: "Generatsiya", vision: "Rasm" };
+          let detail = '<div style="margin-top:8px">' + (st.by_source || []).map((s) => {
+            const label = srcLabels[s.source] || s.source;
+            const max = Math.max(1, ...(st.by_source || []).map((x) => x.n));
+            return '<div class="stat-row"><small style="width:70px">' + label + '</small>' +
+              '<div class="bar"><i style="width:' + Math.round((s.n / max) * 100) + '%"></i></div>' +
+              '<b style="font-size:0.85rem">' + s.n + '</b></div>';
+          }).join("") + '</div>';
+          document.getElementById("statsDetail").innerHTML = detail;
+        } catch (e) {}
+      }).catch(() => { location.href = "/login"; });
+
+      document.getElementById("profileForm").onsubmit = async (e) => {
+        e.preventDefault();
+        showOk(profileOk, ""); showOk(profileErr, "");
+        profileOk.style.display = "none"; profileErr.style.display = "none";
+        const save = document.getElementById("profileSave");
+        save.disabled = true;
+        try {
+          const data = await apiFetch("/api/profile", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              token,
+              name: document.getElementById("pName").value.trim(),
+              surname: document.getElementById("pSurname").value.trim(),
+              phone: document.getElementById("pPhone").value.trim(),
+            }),
+          });
+          localStorage.setItem("neura_user", JSON.stringify(data));
+          showOk(profileOk, "✅ Ma'lumotlar saqlandi");
+        } catch (ex) { showErr(profileErr, ex.message); }
+        save.disabled = false;
+      };
+
+      document.getElementById("passForm").onsubmit = async (e) => {
+        e.preventDefault();
+        profileOk.style.display = "none"; profileErr.style.display = "none";
+        const oldP = document.getElementById("pOldPass").value;
+        const newP = document.getElementById("pNewPass").value;
+        if (newP.length < 4) { showErr(profileErr, "Yangi parol kamida 4 belgidan iborat bo'lsin"); return; }
+        const save = document.getElementById("passSave");
+        save.disabled = true;
+        try {
+          await apiFetch("/api/change-password", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ token, old_password: oldP, new_password: newP }),
+          });
+          document.getElementById("pOldPass").value = "";
+          document.getElementById("pNewPass").value = "";
+          showOk(profileOk, "✅ Parol o'zgartirildi");
+        } catch (ex) { showErr(profileErr, ex.message); }
+        save.disabled = false;
+      };
+
+      document.getElementById("profileLogout").onclick = async () => {
+        await fetch("/api/logout?token=" + encodeURIComponent(token)).catch(() => {});
+        localStorage.removeItem("neura_token");
+        localStorage.removeItem("neura_user");
+        location.href = "/login";
+      };
+    }
+  </script>
+</body>
+</html>

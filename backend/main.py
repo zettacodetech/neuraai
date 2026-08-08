@@ -165,6 +165,26 @@ def register_page() -> FileResponse:
     return FileResponse(os.path.join(FRONTEND, "register.html"))
 
 
+@app.get("/profile")
+def profile_page() -> FileResponse:
+    return FileResponse(os.path.join(FRONTEND, "profile.html"))
+
+
+@app.get("/api-key")
+def api_key_page() -> FileResponse:
+    return FileResponse(os.path.join(FRONTEND, "api-key.html"))
+
+
+@app.get("/about")
+def about_page() -> FileResponse:
+    return FileResponse(os.path.join(FRONTEND, "about.html"))
+
+
+@app.get("/admin")
+def admin_page() -> FileResponse:
+    return FileResponse(os.path.join(FRONTEND, "admin.html"))
+
+
 @app.get("/apk/neuraai.apk")
 def apk_download() -> FileResponse:
     """Android APK — yuklab olish (fayl frontend/apk/ dan xizmat qilinadi)."""
@@ -1315,6 +1335,26 @@ def conversation_messages(conv_id: int, token: str = "") -> JSONResponse:
     return JSONResponse(
         {"title": conv["title"], "items": db.conversation_messages(conv_id, user["id"])}
     )
+
+
+@app.delete("/api/conversations/{conv_id}")
+def conversation_delete(conv_id: int, token: str = "") -> JSONResponse:
+    db = get_db()
+    user = db.get_user_by_token(token)
+    if not user:
+        return JSONResponse({"error": "kirish talab qilinadi"}, status_code=401)
+    if not db.delete_conversation(conv_id, user["id"]):
+        return JSONResponse({"error": "suhbat topilmadi"}, status_code=404)
+    return JSONResponse({"ok": True})
+
+
+@app.get("/api/stats")
+def user_stats(token: str = "") -> JSONResponse:
+    db = get_db()
+    user = db.get_user_by_token(token)
+    if not user:
+        return JSONResponse({"error": "kirish talab qilinadi"}, status_code=401)
+    return JSONResponse(db.user_stats(user["id"]))
 
 
 @app.get("/api/models")

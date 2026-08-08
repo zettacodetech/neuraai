@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#05060f" />
+  <title>Admin — InomjonAI</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <style>
+    .auth-page { min-height: 100dvh; padding: 30px 18px; position: relative; z-index: 1; }
+    .wrap { max-width: 760px; margin: 0 auto; }
+    .card { background: var(--panel); border: 1px solid var(--border); border-radius: 18px;
+      padding: 22px; margin-bottom: 14px; animation: modal-pop 0.4s cubic-bezier(0.22, 1.61, 0.36, 1); }
+    .card h1 { margin: 0 0 4px; font-size: 1.4rem; }
+    .card .sub { color: var(--muted); font-size: 0.88rem; margin-bottom: 16px; }
+    .field input { width: 100%; background: rgba(255,255,255,0.05); border: 1px solid var(--border);
+      border-radius: 12px; padding: 12px 14px; color: var(--text); font-size: 0.95rem; outline: none; }
+    .auth-submit { width: 100%; padding: 13px; border-radius: 13px; font-weight: 700;
+      background: var(--grad); color: #fff; border: none; cursor: pointer; margin-top: 10px; }
+    .q-item { border: 1px solid var(--border); border-radius: 14px; padding: 14px; margin-bottom: 12px; background: rgba(255,255,255,0.03); }
+    .q-q { font-size: 0.93rem; line-height: 1.5; margin-bottom: 8px; }
+    .q-meta { color: var(--muted); font-size: 0.78rem; margin-bottom: 10px; }
+    .q-item textarea { width: 100%; background: #0a0d1f; border: 1px solid var(--border); border-radius: 10px;
+      color: var(--text); padding: 10px; font-size: 0.9rem; resize: vertical; font-family: var(--ff); outline: none; }
+    .q-actions { display: flex; gap: 10px; margin-top: 8px; }
+    .q-actions button { flex: 1; padding: 10px; border-radius: 10px; font-weight: 600; cursor: pointer; }
+    .btn-save { background: rgba(52,211,153,0.15); color: #6ee7b7; border: 1px solid rgba(52,211,153,0.35); }
+    .btn-skip { background: var(--panel2); color: var(--muted); border: 1px solid var(--border); }
+    .empty { text-align: center; color: var(--muted); padding: 30px 10px; font-size: 0.92rem; }
+    .err { display: none; background: rgba(248,113,113,0.12); border: 1px solid rgba(248,113,113,0.35);
+      color: #fca5a5; border-radius: 12px; padding: 10px 14px; font-size: 0.85rem; margin-bottom: 14px; }
+    .admin-link { text-align: center; margin-top: 18px; }
+    .admin-link a { color: var(--muted); text-decoration: none; font-size: 0.85rem; }
+    .admin-link a:hover { color: var(--text); }
+  </style>
+</head>
+<body>
+  <div class="aurora" aria-hidden="true">
+    <span class="orb o1"></span>
+    <span class="orb o2"></span>
+    <span class="orb o3"></span>
+    <span class="grid-line"></span>
+    <canvas id="neuralNet"></canvas>
+  </div>
+  <main class="auth-page">
+    <div class="wrap">
+      <div class="card" id="lockCard">
+        <h1>🛡 Admin</h1>
+        <p class="sub">Kirish uchun maxfiy kalit kerak</p>
+        <div class="err" id="errBox"></div>
+        <div class="field"><label>Admin kalit</label>
+          <input id="adminKey" type="password" placeholder="••••••••" /></div>
+        <button class="auth-submit" id="enterBtn">Kirish</button>
+        <div class="admin-link"><a href="/">← Saytga qaytish</a></div>
+      </div>
+      <div id="panel" hidden>
+        <div class="card">
+          <h1>❓ Yechilmagan savollar</h1>
+          <p class="sub" id="countSub">Yuklanmoqda...</p>
+          <div id="list"></div>
+        </div>
+        <div class="admin-link"><a href="/admin" onclick="refreshList()">🔄 Yangilash</a> · <a href="/">Saytga qaytish</a></div>
+      </div>
+    </div>
+  </main>
+  <script>
+    const errBox = document.getElementById("errBox");
+    const lockCard = document.getElementById("lockCard");
+    const panel = document.getElementById("panel");
+    const savedKey = sessionStorage.getItem("neura_admin_key") || "";
+
+    function showErr(txt) { errBox.textContent = txt; errBox.style.display = "block"; }
+    function hideErr() { errBox.style.display = "none"; }
+
+    async function apiFetch(path, opts) {
+      const res = await fetch(path, opts);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw Object.assign(new Error(data.error || "xato"), { status: res.status });
+      return data;
+    }
+
+    async function refreshList() {
+      const key = sessionStorage.getItem("neura_admin_key") || "";
+      try {
+        const data = await apiFetch("/api/admin/unanswered?key=" + encodeURIComponent(key));
+        const list = document.getElementById("list");
+        const items = data.items || [];
+        document.getElementById("countSub").textContent = items.length
+          ? items.length + " ta javob kutmoqda" : "Hozircha hammasi yaxshi ✨";
+        list.innerHTML = "";
+        if (!items.length) {
+          list.innerHTML = '<div class="empty">🎉 Yechilmagan savollar yo\'q — ajoyib!</div>';
+          return;
+        }
+        items.forEach((it) => {
+          const d = document.createElement("div");
+          d.className = "q-item";
+          d.innerHTML =
+            '<div class="q-q">❓ ' + it.question + "</div>" +
+            '<div class="q-meta">#' + it.id + " · foydalanuvchi " + it.user_id + " · " + (it.created_at || "") + "</div>" +
+            '<textarea placeholder="Javob yozing..."></textarea>' +
+            '<div class="q-actions">' +
+            '<button class="btn-save">💾 Saqlash</button>' +
+            '<button class="btn-skip">⏭ Yopish</button>' +
+            "</div>";
+          d.querySelector(".btn-save").onclick = async () => {
+            const ans = d.querySelector("textarea").value.trim();
+            if (!ans) { showErr("Javob yozing!"); return; }
+            try {
+              await apiFetch("/api/admin/answer", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ key, item_id: it.id, answer: ans }),
+              });
+              d.remove();
+              refreshList();
+            } catch (e) { showErr(e.message); }
+          };
+          d.querySelector(".btn-skip").onclick = () => d.remove();
+          list.appendChild(d);
+        });
+      } catch (e) { showErr(e.message); }
+    }
+
+    document.getElementById("enterBtn").onclick = async () => {
+      hideErr();
+      const key = document.getElementById("adminKey").value.trim();
+      if (!key) { showErr("Kalit kiriting"); return; }
+      sessionStorage.setItem("neura_admin_key", key);
+      try {
+        await apiFetch("/api/admin/unanswered?key=" + encodeURIComponent(key));
+        lockCard.hidden = true;
+        panel.hidden = false;
+        refreshList();
+      } catch (e) {
+        sessionStorage.removeItem("neura_admin_key");
+        showErr(e.message || "Noto'g'ri kalit");
+      }
+    };
+
+    if (savedKey) {
+      apiFetch("/api/admin/unanswered?key=" + encodeURIComponent(savedKey)).then(() => {
+        lockCard.hidden = true;
+        panel.hidden = false;
+        refreshList();
+      }).catch(() => {});
+    }
+  </script>
+</body>
+</html>

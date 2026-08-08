@@ -492,6 +492,53 @@ class Database:
         )
         return [dict(r) for r in rows]
 
+    def delete_conversation(self, conv_id: int, user_id: int) -> bool:
+        """Suhbatni va uning barcha xabarlarini o'chiradi (faqat egasi)."""
+        conv = self.get_conversation(conv_id)
+        if not conv or conv["user_id"] != user_id:
+            return False
+        with self._lock:
+            self._execute(
+                "DELETE FROM messages WHERE conversation_id = ? AND user_id = ?",
+                (conv_id, user_id),
+            )
+            self._execute(
+                "DELETE FROM conversations WHERE id = ? AND user_id = ?",
+                (conv_id, user_id),
+            )
+        return True
+
+    def user_stats(self, user_id: int) -> dict:
+        """Foydalanuvchi statistikasi: xabarlar soni, manbalar, kunlik taqsimot."""
+        total = self._row(
+            "SELECT count(*) AS n FROM messages WHERE user_id = ?", (user_id,)
+        )
+        convs = self._row(
+            "SELECT count(*) AS n FROM conversations WHERE user_id = ?", (user_id,)
+        )
+        by_source = self._rows(
+            "SELECT source, count(*) AS n FROM messages "
+            "WHERE user_id = ? AND role = 'assistant' GROUP BY source ORDER BY n DESC",
+            (user_id,),
+        )
+        by_day = self._rows(
+            "SELECT substr(created_at, 1, 10) AS day, count(*) AS n "
+            "FROM messages WHERE user_id = ? GROUP BY day ORDER BY day DESC LIMIT 14",
+            (user_id,),
+        )
+        rated = self._row(
+            "SELECT COUNT(*) AS n FROM messages "
+            "WHERE user_id = ? AND rating IS NOT NULL AND role = 'assistant'",
+            (user_id,),
+        )
+        return {
+            "messages": total["n"] if total else 0,
+            "conversations": convs["n"] if convs else 0,
+            "by_source": [dict(r) for r in by_source],
+            "by_day": [dict(r) for r in by_day],
+            "rated": rated["n"] if rated else 0,
+        }
+
     # ================= messages =================
     def add_message(
         self,

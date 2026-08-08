@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#05060f" />
+  <link rel="manifest" href="/static/manifest.json" />
+  <title>Haqida — InomjonAI</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <style>
+    .auth-page { min-height: 100dvh; display: flex; flex-direction: column; align-items: center;
+      padding: 34px 18px; position: relative; z-index: 1; }
+    .auth-card { width: 100%; max-width: 620px; border-radius: 24px; padding: 30px 28px;
+      animation: modal-pop 0.5s cubic-bezier(0.22, 1.61, 0.36, 1); }
+    .auth-logo { width: 62px; height: 62px; border-radius: 20px; margin: 0 auto 14px; overflow: hidden;
+      display: grid; place-items: center; box-shadow: 0 14px 40px rgba(109,92,255,0.5);
+      animation: float 5s ease-in-out infinite; }
+    .auth-logo img { width: 100%; height: 100%; object-fit: cover; }
+    .auth-card h1 { text-align: center; margin: 0 0 6px; font-size: 1.7rem; font-weight: 800; }
+    .auth-sub { text-align: center; color: var(--muted); margin: 0 0 20px; font-size: 0.94rem; line-height: 1.6; }
+    .auth-home { display: flex; justify-content: center; margin-top: 20px; font-size: 0.85rem; gap: 18px; }
+    .auth-home a { color: var(--muted); text-decoration: none; display: inline-flex; gap: 6px; align-items: center; }
+    .auth-home a:hover { color: var(--text); }
+    .abt-row { display: flex; gap: 14px; align-items: flex-start; padding: 13px 0;
+      border-bottom: 1px solid var(--border); }
+    .abt-ico { font-size: 1.5rem; flex-shrink: 0; }
+    .abt-row b { display: block; margin-bottom: 3px; }
+    .abt-row p { margin: 0; color: var(--muted); font-size: 0.88rem; line-height: 1.55; }
+    .profile-divider { display: flex; align-items: center; gap: 12px; margin: 20px 0 8px;
+      color: var(--muted); font-size: 0.8rem; font-weight: 600; }
+    .profile-divider::before, .profile-divider::after { content: ""; flex: 1; height: 1px; background: linear-gradient(90deg, transparent, var(--border)); }
+    .profile-divider::after { background: linear-gradient(90deg, var(--border), transparent); }
+    .ver { text-align: center; color: var(--muted); font-size: 0.8rem; margin-top: 18px; }
+  </style>
+</head>
+<body>
+  <div class="aurora" aria-hidden="true">
+    <span class="orb o1"></span>
+    <span class="orb o2"></span>
+    <span class="orb o3"></span>
+    <span class="grid-line"></span>
+    <canvas id="neuralNet"></canvas>
+    <div class="particles">
+      <span style="--x:12%;--d:0s;--s:5px;--c:#7dd3fc"></span>
+      <span style="--x:30%;--d:4s;--s:4px;--c:#c4b5fd"></span>
+      <span style="--x:55%;--d:8s;--s:6px;--c:#67e8f9"></span>
+      <span style="--x:75%;--d:2s;--s:3px;--c:#f0abfc"></span>
+      <span style="--x:90%;--d:6s;--s:5px;--c:#7dd3fc"></span>
+    </div>
+  </div>
+  <main class="auth-page">
+    <div class="auth-card glass">
+      <div class="auth-logo"><img src="/static/icons/logo.png" alt="InomjonAI" /></div>
+      <h1>InomjonAI haqida</h1>
+      <p class="auth-sub">Noldan qurilgan o'zbek tilidagi sun'iy intellekt yordamchisi — sayt, Telegram bot, CLI va Android ilovasi sifatida ishlaydi.</p>
+
+      <div class="profile-divider">✨ Imkoniyatlar</div>
+      <div class="abt-row"><span class="abt-ico">💬</span><div>
+        <b>Suhbat</b><p>Tabiiy savol-javob, tarix saqlanadi, streaming (jonli yozish) va ovozli javoblar bilan.</p></div></div>
+      <div class="abt-row"><span class="abt-ico">🌍</span><div>
+        <b>Internet qidiruv</b><p>Bilmasa, internetdan izlab topadi va manbalar asosida javob beradi.</p></div></div>
+      <div class="abt-row"><span class="abt-ico">💻</span><div>
+        <b>Kod yozish</b><p>Python, JS, SQL, HTML va boshqa tillarda dastur kodlari beradi.</p></div></div>
+      <div class="abt-row"><span class="abt-ico">🎨</span><div>
+        <b>Rasm va video</b><p>Prompt bo'yicha rasm, video, musiqa va ovoz generatsiya qiladi.</p></div></div>
+      <div class="abt-row"><span class="abt-ico">📷</span><div>
+        <b>Rasm tahlili</b><p>Formati, yorug'ligi, ranglari va EXIF ma'lumotlarini aniqlaydi.</p></div></div>
+      <div class="abt-row"><span class="abt-ico">🔑</span><div>
+        <b>API kalit</b><p>Ilovalaringizga ulash uchun bepul API — oddiy JSON so'rovlar.</p></div></div>
+
+      <div class="profile-divider">📱 Platforms</div>
+      <div class="abt-row"><span class="abt-ico">🖥</span><div>
+        <b>Sayt</b><p><a href="/" style="color:var(--violet2);text-decoration:none">neuraai.up.railway.app</a> — hamma qurilmada ishlaydi, PWA sifatida o'rnatiladi.</p></div></div>
+      <div class="abt-row"><span class="abt-ico">✈️</span><div>
+        <b>Telegram bot</b><p>@InomjonAI_bot orqali suhbat, rasm yaratish va tahlil.</p></div></div>
+      <div class="abt-row"><span class="abt-ico">🐚</span><div>
+        <b>Terminal</b><p><code>neura chat</code> — terminalda ishlaydigan noldan yozilgan yordamchi.</p></div></div>
+      <div class="abt-row"><span class="abt-ico">📲</span><div>
+        <b>Android</b><p><a href="/apk/neuraai.apk" style="color:var(--violet2);text-decoration:none">APK</a> — chiroyli native ilova.</p></div></div>
+
+      <div class="ver" id="ver">InomjonAI v1.1.0</div>
+      <div class="auth-home">
+        <a href="/">← Chatga qaytish</a>
+      </div>
+    </div>
+  </main>
+  <script>
+    fetch("/api/version").then((r) => r.json()).then((v) => {
+      document.getElementById("ver").textContent = "InomjonAI v" + v.version +
+        " · " + new Date(v.published).toLocaleDateString("uz-UZ");
+    }).catch(() => {});
+  </script>
+</body>
+</html>

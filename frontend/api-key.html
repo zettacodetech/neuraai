@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#05060f" />
+  <link rel="manifest" href="/static/manifest.json" />
+  <title>API kalit — InomjonAI</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <style>
+    .auth-page { min-height: 100dvh; display: flex; flex-direction: column; align-items: center; justify-content: center;
+      padding: 18px; position: relative; z-index: 1; }
+    .auth-card { width: 100%; max-width: 520px; border-radius: 24px; padding: 30px 26px;
+      animation: modal-pop 0.5s cubic-bezier(0.22, 1.61, 0.36, 1); }
+    .auth-logo { width: 62px; height: 62px; border-radius: 20px; margin: 0 auto 14px; overflow: hidden;
+      display: grid; place-items: center; box-shadow: 0 14px 40px rgba(109,92,255,0.5);
+      animation: float 5s ease-in-out infinite; }
+    .auth-logo img { width: 100%; height: 100%; object-fit: cover; }
+    .auth-card h1 { text-align: center; margin: 0 0 6px; font-size: 1.6rem; font-weight: 800; }
+    .auth-sub { text-align: center; color: var(--muted); margin: 0 0 22px; font-size: 0.92rem; line-height: 1.5; }
+    .auth-err { display: none; background: rgba(248,113,113,0.12); border: 1px solid rgba(248,113,113,0.35);
+      color: #fca5a5; border-radius: 12px; padding: 10px 14px; font-size: 0.85rem; margin-bottom: 14px; }
+    .auth-ok { display: none; background: rgba(52,211,153,0.12); border: 1px solid rgba(52,211,153,0.35);
+      color: #6ee7b7; border-radius: 12px; padding: 10px 14px; font-size: 0.85rem; margin-bottom: 14px; }
+    .auth-home { display: flex; justify-content: center; margin-top: 16px; font-size: 0.85rem; gap: 18px; }
+    .auth-home a { color: var(--muted); text-decoration: none; display: inline-flex; gap: 6px; align-items: center; }
+    .auth-home a:hover { color: var(--text); }
+    .auth-submit { width: 100%; padding: 14px; border-radius: 14px; font-size: 1rem; font-weight: 700;
+      background: var(--grad); color: #fff; border: none; cursor: pointer; transition: transform 0.2s; }
+    .auth-submit:hover { transform: translateY(-2px); }
+    .auth-submit:active { transform: scale(0.97); }
+    .auth-submit:disabled { opacity: 0.6; transform: none; }
+    .key-actions { display: flex; gap: 10px; }
+    .key-actions .auth-submit { flex: 1; padding: 13px; }
+    .api-key-box { background: #10132b; border: 1px solid var(--border); border-radius: 12px; padding: 16px;
+      margin: 14px 0; word-break: break-all; display: flex; align-items: center; gap: 10px; }
+    .api-key-box code { color: var(--cyan); font-size: 0.92rem; flex: 1; }
+    .key-ico-btn { width: 40px; height: 40px; border-radius: 11px; display: grid; place-items: center;
+      border: 1px solid var(--border); color: var(--muted); cursor: pointer; flex-shrink: 0; }
+    .key-ico-btn:hover { color: var(--text); border-color: var(--violet2); }
+    .key-models { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 12px 0; }
+    .key-model { display: block; cursor: pointer; }
+    .key-model input { display: none; }
+    .key-model span { display: flex; flex-direction: column; gap: 2px; padding: 12px; border: 1px solid var(--border);
+      border-radius: 12px; background: rgba(255,255,255,0.04); transition: 0.2s; }
+    .key-model span small { color: var(--muted); font-size: 0.72rem; }
+    .key-model input:checked + span { border-color: var(--violet); background: rgba(109,92,255,0.14); box-shadow: 0 0 0 1px var(--violet); }
+    .key-meta { font-size: 0.82rem; color: var(--muted); margin: 4px 0 12px; }
+    .key-meta b { color: var(--text); }
+    .api-howto { margin-top: 18px; font-size: 0.85rem; color: var(--muted); line-height: 1.6; }
+    .api-howto pre { background: #0a0d1f; border: 1px solid var(--border); border-radius: 10px; padding: 12px;
+      overflow-x: auto; margin-top: 8px; color: var(--text); font-size: 0.8rem; }
+    .profile-divider { display: flex; align-items: center; gap: 12px; margin: 20px 0 14px;
+      color: var(--muted); font-size: 0.8rem; font-weight: 600; }
+    .profile-divider::before, .profile-divider::after { content: ""; flex: 1; height: 1px; background: linear-gradient(90deg, transparent, var(--border)); }
+    .profile-divider::after { background: linear-gradient(90deg, var(--border), transparent); }
+  </style>
+</head>
+<body>
+  <div class="aurora" aria-hidden="true">
+    <span class="orb o1"></span>
+    <span class="orb o2"></span>
+    <span class="orb o3"></span>
+    <span class="grid-line"></span>
+    <canvas id="neuralNet"></canvas>
+    <div class="particles">
+      <span style="--x:12%;--d:0s;--s:5px;--c:#7dd3fc"></span>
+      <span style="--x:30%;--d:4s;--s:4px;--c:#c4b5fd"></span>
+      <span style="--x:55%;--d:8s;--s:6px;--c:#67e8f9"></span>
+      <span style="--x:75%;--d:2s;--s:3px;--c:#f0abfc"></span>
+      <span style="--x:90%;--d:6s;--s:5px;--c:#7dd3fc"></span>
+    </div>
+  </div>
+  <main class="auth-page">
+    <div class="auth-card glass">
+      <div class="auth-logo"><img src="/static/icons/logo.png" alt="InomjonAI" /></div>
+      <h1>API kalit</h1>
+      <p class="auth-sub">Kalit orqali chatni ilovangizga ulang — bepul, kunlik limit bilan</p>
+      <div class="auth-err" id="keyErr"></div>
+      <div class="auth-ok" id="keyOk"></div>
+
+      <div id="keyMake">
+        <div class="field"><label for="keyName">Kalit nomi</label>
+          <input id="keyName" type="text" placeholder="Mening dasturim" maxlength="60" /></div>
+        <div class="profile-divider">🛠 Modellar</div>
+        <div class="key-models">
+          <label class="key-model"><input type="checkbox" data-m="fast" checked />
+            <span>⚡ Tez <small>Oddiy savollar, tez javob</small></span></label>
+          <label class="key-model"><input type="checkbox" data-m="think" />
+            <span>🧠 Aqlli <small>Murakkab savollar, chuqur fikr</small></span></label>
+        </div>
+        <button class="auth-submit" id="keyCreateBtn" type="button">Kalit yaratish</button>
+      </div>
+
+      <div id="keyView" hidden>
+        <div class="api-key-box" id="apiKeyBox"><code id="apiKeyCode">...</code></div>
+        <div class="key-actions">
+          <button class="key-ico-btn" id="keyCopyBtn" title="Nusxalash">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          </button>
+          <button class="auth-submit" id="keyDeleteBtn" type="button" style="background:rgba(248,113,113,0.15);color:#fca5a5;box-shadow:none;border:1px solid rgba(248,113,113,0.35)">Bekor qilish</button>
+        </div>
+        <div class="key-meta" id="keyMeta"></div>
+      </div>
+
+      <div class="api-howto"><b>📘 Qanaqa ishlatiladi?</b>
+        <pre>POST /api/chat
+{
+  "api_key": "YOUR_KEY",
+  "message": "vsalom",
+  "model": "fast"
+}</pre>
+        Iltimos, kalitni boshqalarga ulashmang. Limit: <span id="keyLimit">60 so'rov/min</span>.
+      </div>
+
+      <div class="auth-home">
+        <a href="/">← Chatga qaytish</a>
+        <a href="/profile">👤 Profil</a>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    const token = localStorage.getItem("neura_token");
+    const keyErr = document.getElementById("keyErr");
+    const keyOk = document.getElementById("keyOk");
+
+    function showOk(txt) { keyOk.textContent = txt; keyOk.style.display = "block"; }
+    function showErr(txt) { keyErr.textContent = txt; keyErr.style.display = "block"; }
+    async function apiFetch(tpath, opts) {
+      const res = await fetch(tpath, opts);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw Object.assign(new Error(data.error || "xato"), { status: res.status });
+      return data;
+    }
+
+    if (!token) { location.href = "/login"; }
+    else {
+      const keyMake = document.getElementById("keyMake");
+      const keyView = document.getElementById("keyView");
+      const keyCode = document.getElementById("apiKeyCode");
+      const keyMeta = document.getElementById("keyMeta");
+
+      apiFetch("/api/key?token=" + encodeURIComponent(token)).then((data) => {
+        if (data.key) {
+          keyMake.hidden = true; keyView.hidden = false;
+          keyCode.textContent = data.key;
+          const models = (data.models && data.models.length)
+            ? data.models.map((m) => m === "think" ? "🧠 Aqlli" : "⚡ Tez").join(" · ") : "⚡ Tez";
+          keyMeta.innerHTML = "Nomi: <b>" + (data.name || "Bosh kalit") + "</b> &nbsp;·&nbsp; Modellar: <b>" + models + "</b>";
+          if (data.limit_per_minute) {
+            document.getElementById("keyLimit").textContent = data.limit_per_minute + " so'rov/min";
+          }
+        } else {
+          keyMake.hidden = false; keyView.hidden = true;
+        }
+      }).catch((e) => showErr(e.message));
+
+      document.getElementById("keyCreateBtn").onclick = async () => {
+        keyErr.style.display = "none"; keyOk.style.display = "none";
+        const name = document.getElementById("keyName").value.trim();
+        const models = Array.from(document.querySelectorAll(".key-model input[data-m]:checked")).map((c) => c.dataset.m);
+        if (!models.length) { showErr("Kamida bitta modelni tanlang."); return; }
+        const btn = document.getElementById("keyCreateBtn");
+        btn.disabled = true;
+        try {
+          const data = await apiFetch("/api/key/create", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ token, name: name || "Bosh kalit", models }),
+          });
+          keyMake.hidden = true; keyView.hidden = false;
+          keyCode.textContent = data.key;
+          keyMeta.innerHTML = "Nomi: <b>" + data.name + "</b> &nbsp;·:&nbsp; Modellar: <b>" +
+            (data.models || []).map((m) => m === "think" ? "🧠 Aqlli" : "⚡ Tez").join(" · ") + "</b>";
+          navigator.clipboard && navigator.clipboard.writeText(data.key).catch(() => {});
+          showOk("✅ Kalit yaratildi va nusxalandi!");
+        } catch (e) { showErr(e.message); }
+        btn.disabled = false;
+      };
+
+      document.getElementById("keyCopyBtn").onclick = async () => {
+        const key = document.getElementById("apiKeyCode").textContent;
+        if (navigator.clipboard) { await navigator.clipboard.writeText(key).catch(() => {}); }
+        showOk("✅ Nusxalandi!");
+      };
+
+      document.getElementById("keyDeleteBtn").onclick = async () => {
+        keyErr.style.display = "none"; keyOk.style.display = "none";
+        try {
+          await apiFetch("/api/key?token=" + encodeURIComponent(token), { method: "DELETE" });
+          keyView.hidden = true; keyMake.hidden = false;
+          document.getElementById("keyName").value = "";
+          showOk("Kalit bekor qilindi.");
+        } catch (e) { showErr(e.message); }
+      };
+    }
+  </script>
+</body>
+</html>
