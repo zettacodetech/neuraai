@@ -23,6 +23,7 @@ Provider tartibi: NEURA_LLM_PROVIDER env orqali tanlanadi
 import json
 import os
 import urllib.request
+from collections.abc import Iterable
 
 GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
@@ -79,6 +80,54 @@ class _Provider:
     def available(self) -> bool:
         return bool(self.api_key.strip())
 
+    def stream(
+        self,
+        messages: list[dict],
+        temperature: float = 0.4,
+        max_tokens: int = 600,
+    ) -> Iterable[str]:
+        """OpenAI-compatible streaming — `data:` satrlarini matn bo'laklariga aylantiradi."""
+        limit = (
+            min(max_tokens, OPENROUTER_MAX_TOKENS)
+            if OPENROUTER_BASE_URL in self.base_url
+            else max_tokens
+        )
+        body = json.dumps(
+            {
+                "model": self.model,
+                "messages": messages,
+                "temperature": temperature,
+                "max_completion_tokens": limit,
+                "stream": True,
+            }
+        ).encode("utf-8")
+        req = urllib.request.Request(
+            self.base_url.rstrip("/") + "/chat/completions",
+            data=body,
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.api_key}",
+                "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36",
+            },
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=LLM_TIMEOUT) as resp:
+            for line in _iter_sse_lines(resp):
+                line = line.strip()
+                if not line.startswith("data:"):
+                    continue
+                payload = line[5:].strip()
+                if payload == "[DONE]":
+                    break
+                try:
+                    obj = json.loads(payload)
+                except Exception:
+                    continue
+                delta = (obj.get("choices") or [{}])[0].get("delta") or {}
+                text = delta.get("content")
+                if isinstance(text, str) and text:
+                    yield text
+
 
 class _GeminiProvider:
     """Google Generative Language API — format OpenAI-compatible emas."""
@@ -121,6 +170,52 @@ class _GeminiProvider:
             return cand.get("content", {}).get("parts", [{}])[0].get("text")
         except Exception:
             return None
+
+    def stream(
+        self,
+        messages: list[dict],
+        temperature: float = 0.4,
+        max_tokens: int = 600,
+    ) -> Iterable[str]:
+        """Gemini streaming (SSE `data:` satrlari) — bo'lakma-bo'lak matn."""
+        contents = []
+        for m in messages:
+            role = "user" if m["role"] == "user" else "model"
+            contents.append({"role": role, "parts": [{"text": m["content"]}]})
+        payload = {
+            "contents": contents,
+            "generationConfig": {
+                "temperature": temperature,
+                "maxOutputTokens": max_tokens,
+            },
+        }
+        url = (
+            f"{GEMINI_BASE_URL}/models/{self.model}:streamGenerateContent"
+            f"?alt=sse&key={self.api_key}"
+        )
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode(),
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=LLM_TIMEOUT) as r:
+            for line in _iter_sse_lines(r):
+                line = line.strip()
+                if not line.startswith("data:"):
+                    continue
+                text = line[5:].strip()
+                if not text or text == "[DONE]":
+                    continue
+                try:
+                    obj = json.loads(text)
+                except Exception:
+                    continue
+                parts = (obj.get("candidates") or [{}])[0].get("content", {}).get(
+                    "parts"
+                ) or []
+                chunk = "".join(p.get("text", "") for p in parts)
+                if chunk:
+                    yield chunk
 
 
 class _OllamaProvider:
@@ -182,6 +277,50 @@ class _OllamaProvider:
         except Exception:
             return None
 
+    def stream(
+        self,
+        messages: list[dict],
+        temperature: float = 0.4,
+        max_tokens: int = 600,
+    ) -> Iterable[str]:
+        """Ollama streaming (JSONL bo'laklari) — matn bo'laklarini beradi."""
+        ollama_messages = []
+        for m in messages:
+            content = m["content"]
+            role = m["role"]
+            if role == "system":
+                ollama_messages.append({"role": "system", "content": content})
+            elif role == "user":
+                ollama_messages.append({"role": "user", "content": content})
+            else:
+                ollama_messages.append({"role": "assistant", "content": content})
+        payload = {
+            "model": self.model,
+            "messages": ollama_messages,
+            "stream": True,
+            "options": {"temperature": temperature, "num_predict": max_tokens},
+        }
+        url = f"{self.base_url}/api/chat"
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode(),
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=LLM_TIMEOUT) as r:
+            for line in _iter_sse_lines(r):
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    obj = json.loads(line)
+                except Exception:
+                    continue
+                chunk = (obj.get("message") or {}).get("content")
+                if chunk:
+                    yield chunk
+                if obj.get("done"):
+                    break
+
 
 class _DuckDuckGoProvider:
     """DuckDuckGo AI Chat — API key kerak emas, GPT-4o-mini / Claude-3-haiku."""
@@ -200,6 +339,25 @@ class _DuckDuckGoProvider:
         # Bu soddalashtirilgan — real implementatsiya uchun DDG tokenlari kerak
         # Hozircha placeholder — oddiyroq: hech narsa qilmaymiz, None qaytarib keyingi providerga o'tamiz
         return None
+
+
+def _iter_sse_lines(resp, size: int = 4096) -> Iterable[str]:
+    """SSE / JSONL oqimini satrma-satr beruvchi generator (urllib ham ishlaydi)."""
+    buf = b""
+    read = getattr(resp, "read", None)
+    while True:
+        try:
+            chunk = read(size) if read else b""
+        except Exception:
+            break
+        if not chunk:
+            break
+        buf += chunk
+        while b"\n" in buf:
+            line, buf = buf.split(b"\n", 1)
+            yield line.decode("utf-8", "replace")
+    if buf:
+        yield buf.decode("utf-8", "replace")
 
 
 def _build_providers() -> list:
@@ -390,6 +548,91 @@ def llm_chat(
     return None
 
 
+def llm_chat_stream(
+    messages: list[dict],
+    *,
+    temperature: float = 0.4,
+    max_tokens: int = 600,
+    model: str | None = None,
+) -> Iterable[str]:
+    """Streaming zanjir: bo'lakma-bo'lak matn beradi.
+
+    Xatoda keyingi provayderga o'tadi; barchasi yiqilsa generator bo'sh qoladi
+    (hech qanday chunk bermaydi). Har bir bo'lak o'z-o'zidan to'liq matn emas.
+    """
+    if not LLM_PROVIDERS:
+        return
+    chain = LLM_PROVIDERS
+    if model:
+        resolved = model.strip().split(":")[-1].lstrip("~/")
+        d = model.strip().lstrip("~/")
+
+        def _rank(p):
+            pm = getattr(p, "model", "") or ""
+            pm = pm.strip().lstrip("~/")
+            if pm == d or pm.endswith(d) or d.endswith(pm) or resolved in pm:
+                return 0
+            return 1
+
+        chain = sorted(chain, key=_rank)
+    for provider in chain:
+        if not provider.available:
+            continue
+        saved_model = getattr(provider, "model", None)
+        if model:
+            provider.model = model  # type: ignore[attr-defined]
+        try:
+            got = False
+            if hasattr(provider, "stream") and callable(provider.stream):
+                for piece in provider.stream(  # type: ignore[attr-defined]
+                    messages, temperature=temperature, max_tokens=max_tokens
+                ):
+                    if isinstance(piece, str) and piece:
+                        got = True
+                        yield piece
+            else:
+                content = provider.chat(
+                    messages, temperature=temperature, max_tokens=max_tokens
+                )
+                if isinstance(content, str) and content.strip():
+                    got = True
+                    yield content.strip()
+            if got:
+                return
+        except Exception:
+            continue
+        finally:
+            if saved_model is not None:
+                provider.model = saved_model  # type: ignore[attr-defined]
+
+
+def llm_answer_stream(
+    message: str,
+    history: list[dict] | None = None,
+    context: str | None = None,
+    model: str | None = None,
+) -> Iterable[str]:
+    """llm_answer'ning streaming varianti — bo'lakma-bo'lak javob beradi."""
+    if not llm_available():
+        return
+    system = (
+        "Siz Inomjon AI yordamchisiz. O'zbek tilida (lotin yozuvida) sodda, ishonchli "
+        "va hurmatli javob bering. Javob 3-5 qisqa jumla bo'lsin. Faktni bilmasangiz, "
+        "o'ylab topmang — shunchaki bilmasligingizni ayting."
+    )
+    if context:
+        system += (
+            "\n\nInternetdan topilgan ma'lumotlar (javobda aynan shulardan foydalaning, "
+            "izlab berilgan manbalarga tayanib) — javobni xuddi shu ma'lumotga ko'ra:\n"
+            + context
+        )
+    messages = [{"role": "system", "content": system}]
+    if history:
+        messages.extend(history[-6:])
+    messages.append({"role": "user", "content": message})
+    yield from llm_chat_stream(messages, model=model)
+
+
 def llm_answer(
     message: str,
     history: list[dict] | None = None,
@@ -417,4 +660,10 @@ def llm_answer(
     return llm_chat(messages, model=model)
 
 
-__all__ = ["llm_available", "llm_chat", "llm_answer"]
+__all__ = [
+    "llm_available",
+    "llm_chat",
+    "llm_chat_stream",
+    "llm_answer",
+    "llm_answer_stream",
+]

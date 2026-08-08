@@ -174,6 +174,81 @@ function renderText(text) {
   return html;
 }
 
+/* ============ jonli effektlar (99999D) ============ */
+
+function speak(text, btn) {
+  if (!("speechSynthesis" in window)) return;
+  if (speechSynthesis.speaking && btn.dataset.on === "1") {
+    speechSynthesis.cancel();
+    btn.dataset.on = "0";
+    btn.classList.remove("playing");
+    return;
+  }
+  const u = new SpeechSynthesisUtterance(text.replace(/```[\s\S]*?```/g, " kod ").slice(0, 1200));
+  const voices = speechSynthesis.getVoices();
+  u.voice = voices.find((v) => /^uz/i.test(v.lang)) || voices.find((v) => /^(ru|az|kk|ky)/i.test(v.lang)) || null;
+  u.lang = u.voice ? u.voice.lang : (u.voice && /^uz/i.test(u.voice.lang) ? "uz-UZ" : "ru-RU");
+  u.rate = 1;
+  u.pitch = 1;
+  btn.dataset.on = "1";
+  btn.classList.add("playing");
+  u.onend = u.onerror = () => {
+    btn.dataset.on = "0";
+    btn.classList.remove("playing");
+  };
+  speechSynthesis.speak(u);
+}
+
+function voiceButton(text) {
+  const btn = document.createElement("button");
+  btn.className = "voice-btn";
+  btn.title = "Ovozli o'qish";
+  btn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>';
+  btn.onclick = () => speak(text, btn);
+  return btn;
+}
+
+function confettiBurst() {
+  if (window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const colors = ["#22d3ee", "#8f7bff", "#ec4899", "#fbbf24", "#34d399", "#f472b6"];
+  const n = 42;
+  for (let i = 0; i < n; i++) {
+    const c = document.createElement("span");
+    c.className = "conf";
+    const s = 5 + Math.random() * 8;
+    c.style.left = Math.random() * 100 + "vw";
+    c.style.width = s + "px";
+    c.style.height = s * 0.55 + "px";
+    c.style.background = colors[i % colors.length];
+    c.style.setProperty("--dx", (Math.random() * 200 - 100) + "px");
+    c.style.setProperty("--t", (1.6 + Math.random() * 1.6) + "s");
+    c.style.setProperty("--rot", (Math.random() * 720 - 360) + "deg");
+    c.style.animationDelay = Math.random() * 0.5 + "s";
+    document.body.appendChild(c);
+    c.addEventListener("animationend", () => c.remove());
+  }
+}
+
+function flashRow(row) {
+  if (!row) return;
+  if (window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  row.classList.add("flash-ai");
+  setTimeout(() => row.classList.remove("flash-ai"), 1500);
+}
+
+function aiRowBubble() {
+  const row = document.createElement("div");
+  row.className = "row ai msg-in";
+  const av = document.createElement("div");
+  av.className = "avatar";
+  av.textContent = "✦";
+  row.appendChild(av);
+  const b = document.createElement("div");
+  b.className = "bubble";
+  row.appendChild(b);
+  return { row, bubble: b };
+}
+
 function qMessage(role, text) {
   const row = document.createElement("div");
   row.className = "row " + role + " msg-in";
@@ -200,6 +275,7 @@ function qMessage(role, text) {
       });
     };
     b.appendChild(copy);
+    b.appendChild(voiceButton(text));
   }
   row.appendChild(b);
   chat.appendChild(row);
@@ -358,32 +434,123 @@ async function send(text) {
 
   qMessage("user", text);
   const typing = typingRow();
+  let finished = false;
 
+  let sseConv = currentConv;
   try {
     const body = { message: text, user_id: CLIENT_ID, model: currentModel };
     if (me) body.token = me.token;
     if (currentConv !== null) body.conversation_id = currentConv;
 
-    const data = await api("/api/chat", { method: "POST", body: JSON.stringify(body) });
-    typing.remove();
-    if (data.media_url) {
-      qMedia(data.media_url, data.media_type === "video", text);
-    } else {
-      const row = qMessage("ai", data.reply);
-      addFeedback(row, data.message_id);
+    // ============ SSE jonli javob ============
+    const res = await fetch("/api/chat/stream", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      let emsg = "xato";
+      try { emsg = (await res.json()).error || emsg; } catch (e) {}
+      throw Object.assign(new Error(emsg), { status: res.status });
     }
 
-    if (currentConv === null && data.conversation_id) {
-      currentConv = data.conversation_id;
-      refreshConversations();
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = "";
+    let ai = null;      // {row, bubble}
+    let acc = "";
+    let gotChunk = false;
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      let idx;
+      while ((idx = buf.indexOf("\n\n")) !== -1) {
+        const block = buf.slice(0, idx);
+        buf = buf.slice(idx + 2);
+        for (const ln of block.split("\n")) {
+          if (!ln.startsWith("data:")) continue;
+          let evt;
+          try { evt = JSON.parse(ln.slice(5).trim()); } catch (e) { continue; }
+          if (evt.type === "start") {
+            if (sseConv === null && evt.conversation_id) sseConv = evt.conversation_id;
+          } else if (evt.type === "text") {
+            if (!ai) {
+              typing.remove();
+              ai = aiRowBubble();
+              chat.appendChild(ai.row);
+            }
+            acc += evt.text;
+            ai.bubble.innerHTML = renderText(acc);
+            if (!gotChunk) { flashRow(ai.row); gotChunk = true; }
+            chat.scrollTop = chat.scrollHeight;
+          } else if (evt.type === "media") {
+            typing.remove();
+            qMedia(evt.media_url, evt.media_type === "video", text);
+            confettiBurst();
+            hideScrollDown();
+          } else if (evt.type === "error") {
+            typing.remove();
+            qMessage("ai", evt.reply || "⚠️ Xatolik yuz berdi.");
+          } else if (evt.type === "done") {
+            if (ai) {
+              ai.bubble.appendChild(voiceButton(acc));
+              const copy = document.createElement("button");
+              copy.className = "copy-btn";
+              copy.title = "Javobni nusxalash";
+              copy.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+              copy.onclick = () => {
+                if (!navigator.clipboard) return;
+                navigator.clipboard.writeText(acc).then(() => {
+                  copy.classList.add("done");
+                  copy.textContent = "✓";
+                  setTimeout(() => { copy.classList.remove("ok"); copy.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>'; }, 1200);
+                });
+              };
+              ai.bubble.appendChild(copy);
+              flashRow(ai.row);
+              if (currentConv === null) { currentConv = sseConv; }
+              if (evt.message_id) addFeedback(ai.row, evt.message_id);
+            }
+            finished = true;
+          }
+        }
+      }
     }
+    if (!finished) throw new Error("Stream uzildi");
+
+    refreshConversations();
+    updateStats();
   } catch (e) {
-    typing.remove();
-    if (e.status === 401) {
-      qMessage("ai", "Kirish muddati tugagan. Qaytadan kiring.");
-      setTimeout(() => { logout(); openAuth(); }, 600);
-    } else {
-      qMessage("ai", "⚠️ Xatolik yuz berdi. Iltimos, qayta urinib ko'ring.");
+    // ============ zaxira: oddiy /api/chat ============
+    try {
+      const body = { message: text, user_id: CLIENT_ID, model: currentModel };
+      if (me) body.token = me.token;
+      if (currentConv !== null) body.conversation_id = currentConv;
+      const data = await api("/api/chat", { method: "POST", body: JSON.stringify(body) });
+      typing.remove();
+      if (data.media_url) {
+        qMedia(data.media_url, data.media_type === "video", text);
+        confettiBurst();
+      } else {
+        const row = qMessage("ai", data.reply);
+        flashRow(row);
+        addFeedback(row, data.message_id);
+      }
+      if (currentConv === null && data.conversation_id) {
+        currentConv = data.conversation_id;
+        refreshConversations();
+        updateStats();
+      }
+    } catch (e2) {
+      typing.remove();
+      if (e2.status === 401) {
+        qMessage("ai", "Kirish muddati tugagan. Qaytadan kiring.");
+        setTimeout(() => { logout(); openAuth(); }, 600);
+      } else {
+        qMessage("ai", "⚠️ Xatolik yuz berdi. Iltimos, qayta urinib ko'ring.");
+      }
     }
   }
   sending = false;
@@ -426,6 +593,8 @@ async function sendImage(file) {
     if (!res.ok) throw Object.assign(new Error(data.error || "xato"), { status: res.status });
     typing.remove();
     qMessage("ai", formatAnalysis(data));
+    flashRow(document.querySelector(".row.ai.msg-in:last-of-type"));
+    confettiBurst();
   } catch (e) {
     typing.remove();
     qMessage("ai", "⚠️ Rasm tahlili xatosi: " + (e.message || "qayta urinib ko'ring"));
@@ -460,6 +629,7 @@ async function genArt(kind) {
     if (!res.ok) throw Object.assign(new Error(data.error || "xato"), { status: res.status });
     typing.remove();
     qMedia(data.url, kind === "video", q.trim());
+    confettiBurst();
   } catch (e) {
     typing.remove();
     qMessage("ai", "⚠️ Generatsiya xatosi: " + (e.message || "qayta urinib ko'ring"));
@@ -480,6 +650,7 @@ async function refreshConversations() {
 }
 
 function renderConvList(items) {
+  convItems = items;
   convList.innerHTML = "";
   convEmpty.style.display = items.length ? "none" : "block";
   items.forEach((c) => {
@@ -492,6 +663,44 @@ function renderConvList(items) {
     btn.onclick = () => openConversation(c.id);
     convList.appendChild(btn);
   });
+  updateStats(items);
+}
+
+/* ================= jonli statistika ================= */
+
+function updateStats(items) {
+  const ids = { conv: document.getElementById("statsConv"), msg: document.getElementById("statsMsg") };
+  if (!ids.conv || !ids.msg) return;
+  const list = Array.isArray(items) ? items : convItems;
+  ids.conv.textContent = list ? list.length : 0;
+  ids.msg.textContent = list ? list.reduce((s, c) => s + (c.msg_count || 0), 0) : 0;
+  const st = document.querySelector(".st-pulse");
+  if (st) {
+    st.classList.remove("st-live");
+    void st.offsetWidth;
+    st.classList.add("st-live");
+  }
+}
+
+let convItems = [];
+
+/* ================= pastga tushish ================= */
+
+const scrollDownBtn = document.getElementById("scrollDownBtn");
+
+function hideScrollDown() {
+  if (scrollDownBtn) scrollDownBtn.hidden = true;
+}
+
+function chatOnScroll() {
+  if (!scrollDownBtn) return;
+  const atBottom = chat.scrollHeight - chat.scrollTop - chat.clientHeight < 260;
+  scrollDownBtn.hidden = atBottom;
+}
+
+if (scrollDownBtn) {
+  scrollDownBtn.onclick = () => chat.scrollTo({ top: chat.scrollHeight, behavior: "smooth" });
+  chat.addEventListener("scroll", chatOnScroll, { passive: true });
 }
 
 async function openConversation(id) {
@@ -865,6 +1074,11 @@ keyClose.onclick = () => { keyBackdrop.hidden = true; };
 keyBackdrop.addEventListener("click", (e) => { if (e.target === keyBackdrop) keyBackdrop.hidden = true; });
 
 /* ================= boshlash ================= */
+
+if ("speechSynthesis" in window) {
+  speechSynthesis.getVoices();
+  speechSynthesis.addEventListener("voiceschanged", () => speechSynthesis.getVoices());
+}
 
 async function boot() {
   const token = localStorage.getItem("neura_token");

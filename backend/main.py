@@ -20,8 +20,9 @@ if os.path.exists(_ENV_PATH):
                 _k, _v = _line.split("=", 1)
                 os.environ.setdefault(_k.strip(), _v.strip())
 
+from collections.abc import Iterable
 from fastapi import FastAPI, File, Request, UploadFile
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -29,6 +30,7 @@ from auth import hash_password, new_token, verify_password
 from brain import brain
 from db import get_db
 from gen import generate_image, generate_video, status as gen_status
+from coder import generate_code
 from learning import collect_unanswered, learn_from_messages, learn_pair
 from seeds import SEED_KNOWLEDGE
 from vision import analyze as vision_analyze
@@ -507,6 +509,240 @@ def chat(req: ChatRequest) -> JSONResponse:
     if user and user.get("name"):
         resp["user_name"] = user["name"]
     return JSONResponse(resp)
+
+
+def _sse(payload: dict) -> str:
+    return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+
+def _resolve_chat(req: "ChatRequest") -> dict:
+    """Chat so'z boshi: foydalanuvchi + suhbat + tarix + model. Xatoda {'error': ...}."""
+    db = get_db()
+
+    user = db.get_user_by_token(req.token) if req.token else None
+    if not user and req.api_key:
+        key_user = db.get_user_by_api_key(req.api_key)
+        if not key_user:
+            return {
+                "error": JSONResponse(
+                    {"error": "api kaliti noto'g'ri"}, status_code=401
+                )
+            }
+        if not _api_key_allowed(req.api_key):
+            return {
+                "error": JSONResponse(
+                    {
+                        "error": "So'rovlar limiti (20/daqiqa) tugadi. Keyinroq urinib ko'ring."
+                    },
+                    status_code=429,
+                )
+            }
+        user = key_user
+    if user:
+        user_id = user["id"]
+    else:
+        tg = req.telegram_id
+        uid_str = str(req.user_id) if req.user_id else None
+        if isinstance(tg, int):
+            user_id = db.get_or_create_user(tg, uid_str)
+        elif tg:
+            # Eski ilovalar telegram_id'ga "mobile_..." satrini yuboradi
+            user_id = db.get_or_create_user(None, str(tg))
+        else:
+            user_id = db.get_or_create_user(None, uid_str)
+
+    conv_id = req.conversation_id
+    if conv_id is not None:
+        conv = db.get_conversation(conv_id)
+        if not conv or conv["user_id"] != user_id:
+            return {
+                "error": JSONResponse({"error": "suhbat topilmadi"}, status_code=404)
+            }
+    else:
+        conv_id = db.create_conversation(user_id, req.message)
+
+    db.add_message(user_id, "user", req.message, conversation_id=conv_id)
+
+    history: list[dict] | None = None
+    try:
+        prev = db.conversation_messages(conv_id, user_id)
+        if len(prev) > 1:
+            history = [
+                {
+                    "role": "assistant" if m["role"] == "assistant" else "user",
+                    "content": m["text"],
+                }
+                for m in prev[:-1]
+            ][-8:]
+    except Exception:
+        history = None
+
+    # Model tanlash: "fast" → NEURA_FAST_MODEL (tez), "think" → NEURA_THINK_MODEL (o'ylab)
+    model_name = None
+    if req.model in ("fast", "think"):
+        key = "NEURA_FAST_MODEL" if req.model == "fast" else "NEURA_THINK_MODEL"
+        model_name = os.environ.get(key, "").strip() or None
+    elif req.model:
+        model_name = req.model.strip() or None
+
+    return {
+        "db": db,
+        "user_id": user_id,
+        "conv_id": conv_id,
+        "history": history,
+        "model_name": model_name,
+        "user": user,
+    }
+
+
+def _chat_stream_events(req: "ChatRequest", ctx: dict) -> Iterable[str]:
+    """SSE hodisalari: start → (media | text…) → done. `text` bo'laklari hash-hash keladi."""
+    db = ctx["db"]
+    user_id = ctx["user_id"]
+    conv_id = ctx["conv_id"]
+    history = ctx["history"]
+    model_name = ctx["model_name"]
+
+    yield _sse({"type": "start", "conversation_id": conv_id})
+
+    # Rasm/video so'rovi — bevosita generatsiya
+    gen = _gen_request(req.message)
+    if gen:
+        kind, prompt = gen
+        if not prompt:
+            prompt = (
+                "chiroyli tabiat manzarasi"
+                if kind == "image"
+                else "go'zal tabiat panoramasi"
+            )
+        try:
+            path = generate_image(prompt) if kind == "image" else generate_video(prompt)
+            url = _gen_url(path)
+            label = "🎨 Rasm tayyor!" if kind == "image" else "🎬 Video tayyor!"
+            reply = f"{label}\nPrompt: {prompt}\n\n{url}"
+            msg_id = db.add_message(
+                user_id,
+                "assistant",
+                reply,
+                source="generation",
+                conversation_id=conv_id,
+            )
+            yield _sse(
+                {
+                    "type": "media",
+                    "media_type": kind,
+                    "media_url": url,
+                    "reply": reply,
+                    "message_id": msg_id,
+                }
+            )
+        except Exception as exc:
+            reply = f"⚠️ Rasm yaratishda xatolik: {exc}"
+            msg_id = db.add_message(
+                user_id, "assistant", reply, source="error", conversation_id=conv_id
+            )
+            yield _sse({"type": "error", "reply": reply, "message_id": msg_id})
+        yield _sse({"type": "done", "conversation_id": conv_id})
+        return
+
+    # Tezkor yo'llar: intent / kod / bilim → bir martada to'liq matn
+    reply: str | None = None
+    source = "llm"
+    context: str | None = None
+
+    intent = brain._detect_intent(req.message)
+    if intent:
+        if intent["name"] == "code":
+            code = generate_code(req.message)
+            if code:
+                reply = (
+                    f"Kod tayyor:\n\n```\n{code}\n```\n\n"
+                    "So'rovda noma 'l3m joylar bo'lsa, ularni o'zingizga moslab o'zgartiring. "
+                    "Yana boshqa narsa kerak bo'lsa — yozing!"
+                )
+            else:
+                reply = (
+                    "Kod yozish uchun aniqroq yozing, masalan:\n"
+                    "• 'telegram bot yoz'\n"
+                    "• 'http so'rov yoz'\n"
+                    "• 'jadval yarat' (SQL)\n"
+                    "• 'saralash algoritmi yoz'\n"
+                    "• 'parolni hash qilish'\n\n"
+                    "Yoki kerakli kodni boshqa savol shaklida yozing!"
+                )
+            source = "code"
+        else:
+            reply = intent["reply"]
+            source = "intent"
+    elif not brain._tokens(req.message):
+        reply = "Savolingizni aniqroq yozing, iltimos. Yordam kerak bo'lsa 'yordam' deb yozing."
+        source = "fallback"
+    else:
+        best = brain._retrieve(brain._tokens(req.message), db.get_knowledge())
+        if best and best[1] >= 2.0 and best[2] >= 0.4:
+            reply = best[0]["answer"]
+            source = "knowledge"
+
+    if reply is None and source == "llm":
+        # Kuchaytirilgan yo'l: internet + LLM streaming
+        if os.environ.get("ENABLE_WEB_SEARCH", "1") == "1" and len(req.message) >= 10:
+            try:
+                _, web_ctx = brain._web_search(req.message)
+                if web_ctx:
+                    context = web_ctx
+            except Exception:
+                context = None
+        from llm import llm_answer_stream
+
+        got_any = False
+        parts: list[str] = []
+        try:
+            for chunk in llm_answer_stream(
+                req.message, history=history, context=context, model=model_name
+            ):
+                got_any = True
+                parts.append(chunk)
+                yield _sse({"type": "text", "text": chunk})
+        except Exception:
+            got_any = False
+        if got_any:
+            reply = "".join(parts).strip() or None
+            source = "websearch" if context else "llm"
+
+    reply = reply or (
+        "Kechirasiz, javob tayyorlay olmadim. Savolingizni boshqacha yozib ko'ring."
+    )
+    msg_id = db.add_message(
+        user_id, "assistant", reply, source=source, conversation_id=conv_id
+    )
+    if source == "fallback":
+        db.add_unanswered(req.message, user_id)
+
+    yield _sse(
+        {
+            "type": "done",
+            "reply": reply,
+            "message_id": msg_id,
+            "source": source,
+            "model": model_name,
+        }
+    )
+
+
+@app.post("/api/chat/stream", response_model=None)
+def chat_stream(req: ChatRequest) -> StreamingResponse | JSONResponse:
+    ctx = _resolve_chat(req)
+    if "error" in ctx:
+        return ctx["error"]
+    return StreamingResponse(
+        _chat_stream_events(req, ctx),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
 
 
 @app.post("/api/feedback")
