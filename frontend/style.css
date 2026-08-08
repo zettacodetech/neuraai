@@ -680,3 +680,58 @@ html.kb-open .layout { height: var(--kb, 100dvh); }
 .profile-actions .ghost-btn { width: 100%; }
 #profileAvatar { font-size: 1.7rem; }
 .modal-logo { text-transform: none; }
+
+/* ==================== 3D (ajratilgan joylar) ==================== */
+.tilt3d {
+  transform-style: preserve-3d;
+  will-change: transform;
+  transition: transform 0.16s ease-out, box-shadow 0.25s ease, border-color 0.25s;
+  position: relative;
+}
+.tilt3d:hover { z-index: 4; box-shadow: var(--shadow); }
+.tilt3d::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  opacity: 0; transition: opacity 0.3s;
+  background: radial-gradient(340px circle at var(--mx, 50%) var(--my, 50%), rgba(143,123,255,0.18), transparent 45%);
+  z-index: 2;
+}
+.tilt3d:hover::after { opacity: 1; }
+.tilt3d > * { transform-style: preserve-3d; }
+[data-z] { will-change: transform; transition: transform 0.16s ease-out; }
+
+/* hero bosh sarlavhasi — 3D chuqurlik */
+.hero h1 {
+  text-shadow: 0 1px 0 rgba(255,255,255,0.06), 0 6px 0 rgba(0,0,0,0.28),
+    0 14px 34px rgba(109,92,255,0.35), 0 26px 60px rgba(0,0,0,0.35);
+}
+
+/* welcome logo — uchib yuruvchi 3D */
+.welcome-logo {
+  transform-style: preserve-3d;
+  animation: float3d 6s ease-in-out infinite, glow-pulse 3.5s ease-in-out infinite;
+}
+.welcome-logo img { transform: translateZ(26px); }
+@keyframes float3d {
+  0%   { transform: rotateX(8deg) rotateY(-10deg) translateY(0); }
+  50%  { transform: rotateX(-5deg) rotateY(12deg) translateY(-8px); }
+  100% { transform: rotateX(8deg) rotateY(-10deg) translateY(0); }
+}
+
+/* asosiy tugmalar — 3D bosish */
+.btn-primary, .l-cta, .auth-submit {
+  box-shadow: 0 4px 0 rgba(20,15,45,0.6), 0 12px 34px rgba(109,92,255,0.4);
+  transform: translateY(0);
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+.btn-primary:hover, .l-cta:hover, .auth-submit:hover { transform: translateY(-2px); }
+.btn-primary:active, .l-cta:active, .auth-submit:active {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 rgba(20,15,45,0.6), 0 4px 14px rgba(109,92,255,0.3);
+}
+.send-btn { box-shadow: 0 3px 0 rgba(20,15,45,0.55), 0 8px 22px rgba(109,92,255,0.4); }
+.send-btn:active { transform: translateY(2px) scale(1.02); }
+
+/* sik kamarayish rejimi — 3D o'chiriladi */
+@media (prefers-reduced-motion: reduce) {
+  .tilt3d, .welcome-logo, .orb { animation: none !important; transition: none !important; }
+}

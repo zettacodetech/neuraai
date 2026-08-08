@@ -989,3 +989,59 @@ window.addEventListener("appinstalled", () => { if (installBtn) installBtn.hidde
 
 applyModelUI();
 boot();
+
+/* ================= 3D effektlar (slechki joylar) ================= */
+
+const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+const finePointer = window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+
+function bindTilt(el) {
+  if (reduceMotion || !finePointer) return;
+  el.addEventListener("pointermove", (e) => {
+    const r = el.getBoundingClientRect();
+    if (!r.width) return;
+    const px = (e.clientX - r.left) / r.width;
+    const py = (e.clientY - r.top) / r.height;
+    el.style.transform =
+      "perspective(900px) rotateX(" + ((0.5 - py) * 10).toFixed(2) + "deg) rotateY(" + ((px - 0.5) * 12).toFixed(2) + "deg) translateZ(10px)";
+    el.style.setProperty("--mx", px.toFixed(3));
+    el.style.setProperty("--my", py.toFixed(3));
+    el.querySelectorAll("[data-z]").forEach((c) => {
+      c.style.transform = "translateZ(" + c.dataset.z + "px)";
+    });
+  });
+  el.addEventListener("pointerleave", () => {
+    el.style = "";
+    el.querySelectorAll("[data-z]").forEach((c) => { c.style.transform = ""; });
+  });
+}
+
+function bindAllTilt() {
+  document.querySelectorAll(".tilt3d").forEach((el) => {
+    if (!el.dataset.tilted) { el.dataset.tilted = "1"; bindTilt(el); }
+  });
+}
+bindAllTilt();
+
+// kuzatuvchi — dinamik yaratilgan 3D elementlar uchun
+if (typeof MutationObserver !== "undefined") {
+  new MutationObserver(() => bindAllTilt()).observe(document.body, { childList: true, subtree: true });
+}
+
+// aurora orblari — sichqoncha bilan 3D parallaks (landing)
+if (!reduceMotion) {
+  const orbs = document.querySelectorAll(".orb");
+  let raf = null;
+  window.addEventListener("pointermove", (e) => {
+    if (raf) return;
+    const x = e.clientX / window.innerWidth - 0.5;
+    const y = e.clientY / window.innerHeight - 0.5;
+    raf = requestAnimationFrame(() => {
+      orbs.forEach((o, i) => {
+        const d = (i + 1) * 16;
+        o.style.translate = (-x * d).toFixed(1) + "px " + (-y * d).toFixed(1) + "px";
+      });
+      raf = null;
+    });
+  });
+}
