@@ -97,9 +97,9 @@ def _poll(kind: str, project_id: str) -> dict:
             time.sleep(_POLL_SECONDS)
             continue
         status = (data.get("status") or "").lower()
-        if status == "completed":
+        if status in ("completed", "complete"):
             return data
-        if status in ("failed", "cancelled", "error"):
+        if status in ("failed", "cancelled", "error", "fail"):
             raise RuntimeError(
                 f"Magic Hour {kind} generatsiyasi muvaffaqiyatsiz: {status}"
             )
@@ -108,13 +108,18 @@ def _poll(kind: str, project_id: str) -> dict:
 
 
 def _first_output(data: dict) -> str | None:
-    outputs = data.get("outputs") or []
-    if not outputs:
-        return None
-    first = outputs[0]
-    if isinstance(first, str):
-        return first
-    return first.get("url") or first.get("link")
+    """Javobdan natija URL'ini oladi (API 'downloads' qaytaradi)."""
+    for key in ("downloads", "outputs", "download"):
+        val = data.get(key)
+        if isinstance(val, list) and val:
+            first = val[0]
+            if isinstance(first, str):
+                return first
+            if isinstance(first, dict):
+                return first.get("url") or first.get("link")
+        if isinstance(val, dict):
+            return val.get("url") or val.get("link")
+    return None
 
 
 def generate_image(prompt: str) -> str | None:
@@ -149,8 +154,9 @@ def generate_video(prompt: str, end_seconds: int = 5) -> str | None:
         {
             "name": "Neura AI video",
             "end_seconds": end_seconds,
-            "model": "kling-3.0",
-            "resolution": "720p",
+            "model": "default",
+            "aspect_ratio": "1:1",
+            "resolution": "480p",
             "style": {"prompt": prompt},
         },
     )

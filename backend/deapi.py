@@ -86,15 +86,24 @@ def _poll(request_id: str) -> dict:
 
 
 def _download(url: str, dest: str) -> str | None:
-    req = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
-    try:
-        with urllib.request.urlopen(req, timeout=120) as resp:
-            with open(dest, "wb") as f:
-                f.write(resp.read())
-        return dest
-    except Exception as exc:
-        import sys; print(f"[deapi] download fail: {exc}", flush=True)
-        return None
+    """S3 signed URL ba'zida Authorization header'ni rad etadi (403/422),
+    shuning uchun avval oddiy so'rov, keyin header bilan qayta urinamiz."""
+    for hdrs in (
+        {"User-Agent": _USER_AGENT},
+        {"Authorization": f"Bearer {API_KEY}", "User-Agent": _USER_AGENT},
+    ):
+        req = urllib.request.Request(url, headers=hdrs)
+        try:
+            with urllib.request.urlopen(req, timeout=120) as resp:
+                with open(dest, "wb") as f:
+                    f.write(resp.read())
+            return dest
+        except Exception as exc:
+            import sys
+
+            print(f"[deapi] download urinish muvaffaqiyatsiz: {exc}", flush=True)
+            continue
+    return None
 
 
 def generate_image(prompt: str) -> str | None:
@@ -125,7 +134,9 @@ def generate_image(prompt: str) -> str | None:
         )
         return _download(url, dest)
     except Exception as exc:
-        import sys; print(f"[deapi] download fail: {exc}", flush=True)
+        import sys
+
+        print(f"[deapi] download fail: {exc}", flush=True)
         return None
 
 
@@ -142,8 +153,8 @@ def generate_video(prompt: str) -> str | None:
                 "width": 720,
                 "height": 720,
                 "frames": 48,
-                "fps": 24,
-                "steps": 8,
+                "fps": 30,
+                "steps": 1,
                 "seed": _seed(prompt),
             },
         )
@@ -159,7 +170,9 @@ def generate_video(prompt: str) -> str | None:
         )
         return _download(url, dest)
     except Exception as exc:
-        import sys; print(f"[deapi] download fail: {exc}", flush=True)
+        import sys
+
+        print(f"[deapi] download fail: {exc}", flush=True)
         return None
 
 
