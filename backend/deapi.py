@@ -92,7 +92,8 @@ def _download(url: str, dest: str) -> str | None:
             with open(dest, "wb") as f:
                 f.write(resp.read())
         return dest
-    except Exception:
+    except Exception as exc:
+        import sys; print(f"[deapi] download fail: {exc}", flush=True)
         return None
 
 
@@ -123,7 +124,8 @@ def generate_image(prompt: str) -> str | None:
             f"img_de_{request_id[:8]}_{int(time.time() * 1000) % 100000}.png",
         )
         return _download(url, dest)
-    except Exception:
+    except Exception as exc:
+        import sys; print(f"[deapi] download fail: {exc}", flush=True)
         return None
 
 
@@ -156,7 +158,8 @@ def generate_video(prompt: str) -> str | None:
             f"vid_de_{request_id[:8]}_{int(time.time() * 1000) % 100000}.mp4",
         )
         return _download(url, dest)
-    except Exception:
+    except Exception as exc:
+        import sys; print(f"[deapi] download fail: {exc}", flush=True)
         return None
 
 

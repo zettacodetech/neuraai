@@ -38,20 +38,28 @@ def _headers() -> dict[str, str]:
 
 
 def _post(path: str, payload: dict) -> dict:
-    req = urllib.request.Request(
-        API_BASE + path,
-        data=json.dumps(payload).encode("utf-8"),
-        headers=_headers(),
-        method="POST",
-    )
-    with urllib.request.urlopen(req, timeout=60) as resp:
-        return json.loads(resp.read().decode("utf-8"))
+    try:
+        req = urllib.request.Request(
+            API_BASE + path,
+            data=json.dumps(payload).encode("utf-8"),
+            headers=_headers(),
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except Exception as exc:
+        print(f"[magic] post {path} fail: {str(exc)[:200]}", flush=True)
+        raise
 
 
 def _get(path: str) -> dict:
-    req = urllib.request.Request(API_BASE + path, headers=_headers(), method="GET")
-    with urllib.request.urlopen(req, timeout=60) as resp:
-        return json.loads(resp.read().decode("utf-8"))
+    try:
+        req = urllib.request.Request(API_BASE + path, headers=_headers(), method="GET")
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except Exception as exc:
+        print(f"[magic] get {path} fail: {str(exc)[:200]}", flush=True)
+        raise
 
 
 def _download(url: str, dest: str) -> str | None:

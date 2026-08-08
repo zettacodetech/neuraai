@@ -23,6 +23,10 @@ _OUT_DIR = os.environ.get(
 os.makedirs(_OUT_DIR, exist_ok=True)
 
 
+def _log(msg: str) -> None:
+    print(f"[gen] {msg}", flush=True)
+
+
 def _seed(text: str) -> int:
     return int(hashlib.sha256(text.encode("utf-8")).hexdigest()[:8], 16)
 
@@ -308,7 +312,8 @@ def generate_image(prompt: str) -> str:
                 with open(path, "wb") as f:
                     f.write(data)
                 return path
-    except Exception:
+    except Exception as exc:
+        _log(f"pollinations image: {exc}")
         pass
 
     try:
@@ -319,7 +324,8 @@ def generate_image(prompt: str) -> str:
             path = de_image(prompt)
             if path:
                 return path
-    except Exception:
+    except Exception as exc:
+        _log(f"deapi image: {exc}")
         pass
 
     try:
@@ -330,7 +336,8 @@ def generate_image(prompt: str) -> str:
             path = mh_image(prompt)
             if path:
                 return path
-    except Exception:
+    except Exception as exc:
+        _log(f"magic image: {exc}")
         pass
 
     seed = _seed(prompt)
@@ -374,7 +381,8 @@ def generate_video(prompt: str) -> str:
                 with open(path, "wb") as f:
                     f.write(data)
                 return path
-    except Exception:
+    except Exception as exc:
+        _log(f"pollinations image: {exc}")
         pass
 
     try:
@@ -385,7 +393,8 @@ def generate_video(prompt: str) -> str:
             path = de_video(prompt)
             if path:
                 return path
-    except Exception:
+    except Exception as exc:
+        _log(f"deapi image: {exc}")
         pass
 
     try:
@@ -396,7 +405,8 @@ def generate_video(prompt: str) -> str:
             path = mh_video(prompt)
             if path:
                 return path
-    except Exception:
+    except Exception as exc:
+        _log(f"magic video: {exc}")
         pass
 
     seed = _seed(prompt)
