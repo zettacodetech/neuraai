@@ -960,40 +960,55 @@ class VoiceRequest(BaseModel):
 
 @app.post("/api/generate-voice")
 async def generate_voice(req: VoiceRequest) -> JSONResponse:
-    """Matndi ovozga aylantirish (TTS) — Pollinations elevenlabs/kokoro."""
+    """Matndi ovozga aylantirish (TTS): ElevenLabs → Pollinations (fallback)."""
     if len(req.text.strip()) < 1:
         return JSONResponse({"error": "matn kiritilmadi"}, status_code=400)
+    text = req.text.strip()
+    voice_id = req.voice if len(req.voice or "") == 20 else None
+
+    try:
+        import elevenlabs
+
+        if elevenlabs.available():
+            data, err = elevenlabs.generate_voice(text, voice=voice_id)
+            if data:
+                name = f"el_voice_{int(time.time() * 1000) % 1000000}.mp3"
+                path = os.path.join(GEN_DIR, name)
+                with open(path, "wb") as f:
+                    f.write(data)
+                return JSONResponse(
+                    {
+                        "success": True,
+                        "audio_url": _gen_url(path),
+                        "provider": "elevenlabs",
+                    }
+                )
+    except Exception:
+        pass
+
     try:
         import pollinations
 
         if not pollinations.available():
-            return JSONResponse(
-                {"error": "POLLINATIONS_API_KEY o'rnatilmagan"}, status_code=503
-            )
-        data, err = pollinations.generate_audio(
-            req.text.strip(), voice=req.voice or None
-        )
+            raise RuntimeError("POLLINATIONS_API_KEY o'rnatilmagan")
+        data, err = pollinations.generate_audio(text, voice=req.voice or None)
         if not data:
             if err == "HTTP 401":
-                return JSONResponse(
-                    {
-                        "error": "Pollinations API kaliti eskirgan yoki bekor qilingan (401)"
-                    },
-                    status_code=502,
-                )
+                raise RuntimeError("Pollinations API kaliti eskirgan (401)")
             if err and err.startswith("HTTP 402"):
-                return JSONResponse(
-                    {"error": "Pollinations balansi yetarli emas (402)"},
-                    status_code=402,
+                raise RuntimeError(
+                    "Pollinations balansi 0 — enter.pollinations.ai dan to'ldiring (402)"
                 )
             raise RuntimeError(err or "javob yo'q")
         name = f"poll_voice_{int(time.time() * 1000) % 1000000}.mp3"
         path = os.path.join(GEN_DIR, name)
         with open(path, "wb") as f:
             f.write(data)
-        return JSONResponse({"success": True, "audio_url": _gen_url(path)})
+        return JSONResponse(
+            {"success": True, "audio_url": _gen_url(path), "provider": "pollinations"}
+        )
     except Exception as e:
-        return JSONResponse({"error": f"Ovoz generatsiya xato: {e}"}, status_code=500)
+        return JSONResponse({"error": f"Ovoz generatsiya xato: {e}"}, status_code=503)
 
 
 # ================= Canvas / Dizayn shablonlari =================
