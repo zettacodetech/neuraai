@@ -810,3 +810,45 @@ html.kb-open .layout { height: var(--kb, 100dvh); }
 @media (prefers-reduced-motion: reduce) {
   .particles span, .welcome-card::before, .f-card::before, .plat::before, .m-card::before, .s-card::before, .step::before { animation: none !important; }
 }
+
+/* ============ 24D — cheksiz o'lcham qatlami ============ */
+
+/* 1) kartalar tinimsiz 3D "nafas" — hoverda tilt mas'ul */
+.tilt3d { animation: breathe3d var(--fd, 9s) ease-in-out infinite; }
+.tilt3d:hover { animation: none; }
+@keyframes breathe3d {
+  0%, 100% { transform: translateZ(0) rotateX(1.4deg) rotateY(-1.8deg); }
+  50%      { transform: translateZ(7px) rotateX(-1.4deg) rotateY(1.8deg); }
+}
+
+/* 2) xrom oyna aksi (chrome floor mirror) */
+.welcome-logo, .founder-ava {
+  -webkit-box-reflect: below 6px linear-gradient(transparent 58%, rgba(255,255,255,0.16));
+}
+
+/* 3) holo skaneri — butun landing bo'ylab yuguruvchi nur */
+.landing::after {
+  content: ""; position: absolute; inset: 0; z-index: 2; pointer-events: none;
+  background: linear-gradient(180deg, transparent, rgba(34,211,238,0.05) 50%, transparent);
+  background-size: 100% 240px;
+  animation: scan 10s linear infinite;
+}
+@keyframes scan {
+  0%   { background-position: 0 -240px; }
+  100% { background-position: 0 100vh; }
+}
+
+/* 4) yulduzlar — rangli neon chang */
+.particles span { background: radial-gradient(circle, var(--c, #7dd3fc), transparent 65%); }
+
+/* 5) chip'lar holo porlash */
+.chip:hover { border-color: #22d3ee; box-shadow: 0 0 16px rgba(34,211,238,0.28); }
+
+/* 6) model belgilari — porlash pulsi */
+.m-tag { box-shadow: 0 0 12px rgba(34,211,238,0.12); }
+.m-card.fast .m-tag { box-shadow: 0 0 14px rgba(34,211,238,0.25); }
+.m-card.think .m-tag { box-shadow: 0 0 14px rgba(236,72,153,0.25); }
+
+@media (prefers-reduced-motion: reduce) {
+  .tilt3d, .landing::after { animation: none !important; }
+}

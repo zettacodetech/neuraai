@@ -1011,14 +1011,23 @@ function bindTilt(el) {
     });
   });
   el.addEventListener("pointerleave", () => {
-    el.style = "";
-    el.querySelectorAll("[data-z]").forEach((c) => { c.style.transform = ""; });
+    el.style.removeProperty("transform");
+    el.style.removeProperty("--mx");
+    el.style.removeProperty("--my");
+    el.querySelectorAll("[data-z]").forEach((c) => { c.style.removeProperty("transform"); });
   });
 }
 
 function bindAllTilt() {
-  document.querySelectorAll(".tilt3d").forEach((el) => {
-    if (!el.dataset.tilted) { el.dataset.tilted = "1"; bindTilt(el); }
+  document.querySelectorAll(".tilt3d").forEach((el, i) => {
+    if (!el.dataset.tilted) {
+      el.dataset.tilted = "1";
+      bindTilt(el);
+      if (!reduceMotion) {
+        el.style.setProperty("--fd", (7 + (i % 5)) + "s");
+        el.style.animationDelay = "-" + (i % 9) + "s";
+      }
+    }
   });
 }
 bindAllTilt();
