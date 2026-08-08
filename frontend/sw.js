@@ -1,4 +1,4 @@
-const CACHE = "neura-ai-v3";
+const CACHE = "neura-ai-v4";
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then(() => self.skipWaiting()));

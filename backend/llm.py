@@ -22,6 +22,7 @@ Provider tartibi: NEURA_LLM_PROVIDER env orqali tanlanadi
 
 import json
 import os
+import re
 import urllib.request
 from collections.abc import Iterable
 
@@ -360,6 +361,29 @@ def _iter_sse_lines(resp, size: int = 4096) -> Iterable[str]:
         yield buf.decode("utf-8", "replace")
 
 
+def _clean(text: str) -> str:
+    """Model ba'zan system prompt bo'laklarini javobga kiritib yuboradi — tozalaymiz."""
+    if not text:
+        return text
+    text = re.sub(
+        r"^\s*[*\-–—•]?\s*(Tone|Verbosity|Format|Sentence count|Length|Output format|Additional instructions)\s*:.*$",
+        "",
+        text,
+        flags=re.M | re.I,
+    )
+    text = re.sub(r"^\s*\)\s*[.\n]", "", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
+_SYSTEM = (
+    "Siz Inomjon AI yordamchisiz. O'zbek tilida (lotin yozuvida) sodda, ishonchli "
+    "va hurmatli javob bering. Javob 3-5 qisqa jumla bo'lsin. Faktni bilmasangiz, "
+    "o'ylab topmang — shunchaki bilmasligingizni ayting. "
+    "Hech qachon ko'rsatma yoki sozlama bo'limlarini javobga kiritmang — faqat javob."
+)
+
+
 def _build_providers() -> list:
     providers: list = []
 
@@ -540,7 +564,7 @@ def llm_chat(
                     data = json.loads(resp.read().decode("utf-8"))
                 content = data["choices"][0]["message"]["content"]
             if isinstance(content, str) and content.strip():
-                return content.strip()
+                return _clean(content)
             continue  # bo'sh javob — keyingi providerga o'tamiz
         except Exception as exc:  # keyingi providerga o'tamiz
             last_error = exc
@@ -589,7 +613,7 @@ def llm_chat_stream(
                 ):
                     if isinstance(piece, str) and piece:
                         got = True
-                        yield piece
+                        yield _clean(piece)
             else:
                 content = provider.chat(
                     messages, temperature=temperature, max_tokens=max_tokens
@@ -615,11 +639,7 @@ def llm_answer_stream(
     """llm_answer'ning streaming varianti — bo'lakma-bo'lak javob beradi."""
     if not llm_available():
         return
-    system = (
-        "Siz Inomjon AI yordamchisiz. O'zbek tilida (lotin yozuvida) sodda, ishonchli "
-        "va hurmatli javob bering. Javob 3-5 qisqa jumla bo'lsin. Faktni bilmasangiz, "
-        "o'ylab topmang — shunchaki bilmasligingizni ayting."
-    )
+    system = _SYSTEM
     if context:
         system += (
             "\n\nInternetdan topilgan ma'lumotlar (javobda aynan shulardan foydalaning, "
@@ -641,12 +661,8 @@ def llm_answer(
 ) -> str | None:
     """Foydalanuvchi savoliga LLM javobi — tarix va internet konteksti bilan."""
     if not llm_available():
-        return None
-    system = (
-        "Siz Inomjon AI yordamchisiz. O'zbek tilida (lotin yozuvida) sodda, ishonchli "
-        "va hurmatli javob bering. Javob 3-5 qisqa jumla bo'lsin. Faktni bilmasangiz, "
-        "o'ylab topmang — shunchaki bilmasligingizni ayting."
-    )
+        return
+    system = _SYSTEM
     if context:
         system += (
             "\n\nInternetdan topilgan ma'lumotlar (javobda aynan shulardan foydalaning, "

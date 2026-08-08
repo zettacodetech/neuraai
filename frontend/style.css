@@ -89,6 +89,7 @@ button:focus-visible, a:focus-visible, textarea:focus-visible, input:focus-visib
 .l-cta {
   background: var(--grad); color: #fff; font-weight: 600; font-size: 0.9rem;
   padding: 11px 20px; border-radius: 12px; transition: transform 0.2s, box-shadow 0.2s;
+  text-decoration: none; display: inline-flex; align-items: center;
 }
 .l-cta:hover { transform: translateY(-2px); box-shadow: 0 10px 30px rgba(109, 92, 255, 0.4); }
 
@@ -109,6 +110,7 @@ button:focus-visible, a:focus-visible, textarea:focus-visible, input:focus-visib
   background: var(--grad); color: #fff; font-weight: 700; font-size: 1.02rem;
   padding: 15px 30px; border-radius: 14px; box-shadow: 0 14px 40px rgba(109, 92, 255, 0.45);
   transition: transform 0.2s;
+  text-decoration: none; display: inline-flex; align-items: center; justify-content: center;
 }
 .btn-primary:hover { transform: translateY(-2px) scale(1.02); }
 .btn-ghost {
@@ -306,6 +308,7 @@ button:focus-visible, a:focus-visible, textarea:focus-visible, input:focus-visib
 .head-btn:hover { background: var(--panel2); }
 .accent-btn { background: var(--grad); border: none; color: #fff; }
 .accent-btn:hover { background: var(--grad); }
+a.accent-btn, a.head-btn { text-decoration: none; display: inline-flex; align-items: center; gap: 8px; }
 
 /* model switch */
 .model-switch { display: flex; gap: 4px; padding: 4px; border-radius: 12px; background: rgba(255,255,255,0.05); border: 1px solid var(--border); }
