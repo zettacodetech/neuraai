@@ -415,11 +415,19 @@ a.accent-btn, a.head-btn { text-decoration: none; display: inline-flex; align-it
 
 /* ==================== modals ==================== */
 .modal-backdrop {
-  position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center;
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  z-index: 999; display: grid; place-items: center;
   background: rgba(3,4,12,0.72); backdrop-filter: blur(8px); padding: 16px;
+  overflow-y: auto;
   animation: modal-fade 0.3s ease-out;
 }
-.modal { width: 100%; max-width: 420px; border-radius: 22px; padding: 28px; position: relative; }
+.modal-backdrop:not([hidden]) { visibility: visible; }
+.modal-backdrop[hidden] { display: none !important; }
+.modal {
+  width: 100%; max-width: 420px; border-radius: 22px; padding: 28px; position: relative;
+  max-height: 94dvh; overflow-y: auto;
+  margin: auto;
+}
 .modal-backdrop > .modal {
   animation: modal-pop 0.48s cubic-bezier(0.22, 1.61, 0.36, 1);
 }
@@ -549,7 +557,7 @@ a.accent-btn, a.head-btn { text-decoration: none; display: inline-flex; align-it
 
 /* modallar — mayda ekranlarda ham o'rtada qalqib chiqadi (bottom-sheet yo'q) */
 @media (max-width: 520px) {
-  .modal-backdrop { align-items: center; padding: 14px; }
+  .modal-backdrop { padding: 14px; }
   .modal { max-width: 100%; border-radius: 22px; padding: 24px 18px calc(18px + var(--safe-bottom)); }
   .modal-lg { max-width: 100%; }
 }
