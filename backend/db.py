@@ -429,6 +429,32 @@ class Database:
         with self._lock:
             self._execute("UPDATE users SET name = ? WHERE id = ?", (name, user_id))
 
+    def update_profile(
+        self,
+        user_id: int,
+        name: str | None = None,
+        surname: str | None = None,
+        phone: str | None = None,
+    ) -> None:
+        with self._lock:
+            self._execute(
+                "UPDATE users SET name = COALESCE(?, name), "
+                "surname = COALESCE(?, surname), phone = COALESCE(?, phone) "
+                "WHERE id = ?",
+                (name, surname, phone, user_id),
+            )
+
+    def get_password_hash(self, user_id: int) -> str | None:
+        row = self._row("SELECT password_hash FROM users WHERE id = ?", (user_id,))
+        return row["password_hash"] if row else None
+
+    def set_password_hash(self, user_id: int, password_hash: str) -> None:
+        with self._lock:
+            self._execute(
+                "UPDATE users SET password_hash = ? WHERE id = ?",
+                (password_hash, user_id),
+            )
+
     # ================= conversations =================
     def create_conversation(self, user_id: int, title: str) -> int:
         with self._lock:

@@ -33,7 +33,7 @@ COHERE_BASE_URL = "https://api.cohere.com/compatibility/v1"
 DEFAULT_GROQ_MODEL = "llama-3.3-70b-versatile"
 DEFAULT_OPENROUTER_MODEL = "~openai/gpt-latest"
 DEFAULT_KIE_MODEL = "deepseek-chat"
-DEFAULT_GEMINI_MODEL = "gemini-1.5-flash"
+DEFAULT_GEMINI_MODEL = "gemini-flash-latest"
 DEFAULT_POLLINATIONS_MODEL = "openai"
 DEFAULT_COHERE_MODEL = "command-a-plus-05-2026"
 

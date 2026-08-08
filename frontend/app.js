@@ -44,6 +44,24 @@ const keyError = document.getElementById("keyError");
 const apiKeyBox = document.getElementById("apiKeyBox");
 const loginTopBtn = document.getElementById("loginTopBtn");
 
+const profileBackdrop = document.getElementById("profileBackdrop");
+const profileClose = document.getElementById("profileClose");
+const profileAvatar = document.getElementById("profileAvatar");
+const profileSub = document.getElementById("profileSub");
+const profileForm = document.getElementById("profileForm");
+const profileError = document.getElementById("profileError");
+const profileSave = document.getElementById("profileSave");
+const pName = document.getElementById("pName");
+const pSurname = document.getElementById("pSurname");
+const pEmail = document.getElementById("pEmail");
+const pPhone = document.getElementById("pPhone");
+const passForm = document.getElementById("passForm");
+const passError = document.getElementById("passError");
+const passSave = document.getElementById("passSave");
+const pOldPass = document.getElementById("pOldPass");
+const pNewPass = document.getElementById("pNewPass");
+const profileLogout = document.getElementById("profileLogout");
+
 /* ================= holat ================= */
 
 let me = null;          // {token, username, name, surname, email, phone} | null
@@ -168,6 +186,21 @@ function qMessage(role, text) {
   const b = document.createElement("div");
   b.className = "bubble";
   b.innerHTML = renderText(text);
+  if (role === "ai") {
+    const copy = document.createElement("button");
+    copy.className = "copy-btn";
+    copy.title = "Javobni nusxalash";
+    copy.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+    copy.onclick = () => {
+      if (!navigator.clipboard) return;
+      navigator.clipboard.writeText(text).then(() => {
+        copy.classList.add("done");
+        copy.textContent = "✓";
+        setTimeout(() => { copy.classList.remove("ok"); copy.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>'; }, 1200);
+      });
+    };
+    b.appendChild(copy);
+  }
   row.appendChild(b);
   chat.appendChild(row);
   chat.scrollTop = chat.scrollHeight;
@@ -270,6 +303,14 @@ function addFeedback(row, messageId) {
   };
 }
 
+function greeting() {
+  const h = new Date().getHours();
+  if (h >= 5 && h < 11) return "Xayrli tong";
+  if (h >= 11 && h < 17) return "Xayrli kun";
+  if (h >= 17 && h < 23) return "Xayrli kech";
+  return "Xayrli tun";
+}
+
 function showWelcome() {
   const name = me ? (me.name || me.username) : "";
   chat.innerHTML = "";
@@ -277,23 +318,23 @@ function showWelcome() {
   w.className = "welcome";
   w.innerHTML =
     "<div class='welcome-logo'>✦</div>" +
-    "<h2>" + (name ? "Assalomu alaykum, <span class='grad-text'>" + esc(name) + "</span>!" : "Sizning aqlli<br><span class='grad-text'>yordamchingiz</span>") + "</h2>" +
+    "<h2>" + greeting() + (name ? ", <span class='grad-text'>" + esc(name) + "</span>!" : "!") + "</h2>" +
     "<p>Men suhbatlashib o'rganadigan sun'iy intellektman. Savol bering, kod yozing, rasm tahlil qiling yoki yangi rasm/video yarating.</p>";
   const grid = w.appendChild(document.createElement("div"));
   grid.className = "welcome-grid";
   const items = [
-    { e: "💬", t: "Suhbat", d: "Har qanday savolga tabiiy javob" },
-    { e: "💻", t: "Kod", d: "Dasturlash kodlari yozadi" },
-    { e: "📷", t: "Rasm tahlili", d: "Rasmni o'qiydi va izohlaydi" },
-    { e: "🌍", t: "Qidiruv", d: "Internetdan yangi ma'lumot" },
-    { e: "🎨", t: "Rasm yaratish", d: "Prompt bo'yicha rasm chizadi" },
-    { e: "🎬", t: "Video yaratish", d: "Matnni videoga aylantiradi" },
+    { e: "💬", t: "Suhbat", d: "Har qanday savolga tabiiy javob", q: "Nima qila olasan?" },
+    { e: "💻", t: "Kod", d: "Dasturlash kodlari yozadi", q: "Python dastur yozib ber: foydalanuvchi ismini so'rab, salomlashadigan" },
+    { e: "📷", t: "Rasm tahlili", d: "Rasmni o'qiydi va izohlaydi", q: "" },
+    { e: "🌍", t: "Qidiruv", d: "Internetdan yangi ma'lumot", q: "O'zbekiston bo'yicha so'nggi kunlardagi muhim yangiliklarni topib ber" },
+    { e: "🎨", t: "Rasm yaratish", d: "Prompt bo'yicha rasm chizadi", art: "image" },
+    { e: "🎬", t: "Video yaratish", d: "Matnni videoga aylantiradi", art: "video" },
   ];
   items.forEach((it) => {
     const card = document.createElement("button");
     card.className = "welcome-card";
     card.innerHTML = "<span>" + it.e + "</span><b>" + it.t + "</b><small>" + it.d + "</small>";
-    card.onclick = () => send(it.t === "Rasm tahlili" ? "Rasmni tahlil qil" : it.t === "Rasm yaratish" ? "Rasm yarat" : it.t === "Video yaratish" ? "Video yarat" : "Neura AI nima qila oladi?");
+    card.onclick = () => { if (it.art) genArt(it.art); else if (it.file) fileInput.click(); else send(it.q); };
     grid.appendChild(card);
   });
   w.appendChild(grid);
@@ -537,6 +578,13 @@ authForm.onsubmit = async (e) => {
       email: data.email || "",
     };
     localStorage.setItem("neura_token", data.token);
+    try {
+      const u = await api("/api/me?token=" + encodeURIComponent(data.token));
+      me.name = u.name || me.name;
+      me.surname = u.surname || "";
+      me.email = u.email || "";
+      me.phone = u.phone || "";
+    } catch (e) {}
     cacheUser(me);
     closeAuth();
     renderUser();
@@ -560,9 +608,12 @@ function renderUser() {
   if (loginTopBtn) loginTopBtn.style.display = "none";
   const initial = (me.name || me.username || "?").charAt(0).toUpperCase();
   sideUser.innerHTML =
+    '<button class="user-card" id="userCard" title="Profil">' +
     '<div class="user-ava">' + esc(initial) + "</div>" +
     '<div class="user-info"><div class="user-name">' + esc(me.name || me.username || "") + '</div><div class="user-login">' + "@" + esc(me.username.toLowerCase()) + "</div></div>" +
+    "</button>" +
     '<button class="logout-btn" id="logoutBtn" title="Chiqish">Chiqish</button>';
+  document.getElementById("userCard").onclick = () => openProfile();
   document.getElementById("logoutBtn").onclick = async () => {
     await api("/api/logout?token=" + encodeURIComponent(me.token)).catch(() => {});
     logout();
@@ -570,6 +621,7 @@ function renderUser() {
 }
 
 function logout() {
+  try { closeProfile(); } catch (e) {}
   me = null;
   currentConv = null;
   localStorage.removeItem("neura_token");
@@ -665,6 +717,84 @@ keyRevokeBtn.onclick = async () => {
     keyError.textContent = e.message;
   }
 };
+
+/* ================= profil ================= */
+
+function openProfile() {
+  if (!me) { openAuth(); return; }
+  profileError.textContent = "";
+  passError.textContent = "";
+  pOldPass.value = "";
+  pNewPass.value = "";
+  pName.value = me.name || me.username || "";
+  pSurname.value = me.surname || "";
+  pEmail.value = me.email || "";
+  pPhone.value = me.phone || "";
+  const initial = (me.name || me.username || "?").charAt(0).toUpperCase();
+  profileAvatar.textContent = initial;
+  profileSub.textContent = "@" + (me.username || "").toLowerCase() + (me.offline ? " · oflayn rejimda" : "");
+  profileBackdrop.hidden = false;
+}
+
+function closeProfile() { profileBackdrop.hidden = true; }
+
+profileForm.onsubmit = async (e) => {
+  e.preventDefault();
+  profileError.textContent = "";
+  if (!me) { openAuth(); return; }
+  profileSave.disabled = true;
+  try {
+    const data = await api("/api/profile", {
+      method: "POST",
+      body: JSON.stringify({
+        token: me.token,
+        name: pName.value.trim(),
+        surname: pSurname.value.trim(),
+        phone: pPhone.value.trim(),
+      }),
+    });
+    me.name = data.name;
+    me.surname = data.surname || "";
+    me.phone = data.phone || "";
+    me.email = data.email || "";
+    cacheUser(me);
+    renderUser();
+    profileError.textContent = "✅ Ma'lumotlar saqlandi";
+  } catch (err) {
+    profileError.textContent = err.message;
+  }
+  profileSave.disabled = false;
+};
+
+passForm.onsubmit = async (e) => {
+  e.preventDefault();
+  passError.textContent = "";
+  if (!me) { openAuth(); return; }
+  passSave.disabled = true;
+  try {
+    await api("/api/change-password", {
+      method: "POST",
+      body: JSON.stringify({ token: me.token, old_password: pOldPass.value, new_password: pNewPass.value }),
+    });
+    pOldPass.value = "";
+    pNewPass.value = "";
+    passError.textContent = "✅ Parol o'zgartirildi";
+  } catch (err) {
+    passError.textContent = err.message;
+  }
+  passSave.disabled = false;
+};
+
+profileLogout.onclick = async () => {
+  if (!me) { closeProfile(); return; }
+  await api("/api/logout?token=" + encodeURIComponent(me.token)).catch(() => {});
+  logout();
+};
+
+profileClose.onclick = closeProfile;
+profileBackdrop.addEventListener("click", (e) => {
+  if (e.target === profileBackdrop) closeProfile();
+});
 
 /* ================= landing interaktiv ================= */
 

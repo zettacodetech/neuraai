@@ -106,6 +106,19 @@ class RenameRequest(BaseModel):
     name: str
 
 
+class ProfileUpdateRequest(BaseModel):
+    token: str = ""
+    name: str = ""
+    surname: str = ""
+    phone: str = ""
+
+
+class ChangePasswordRequest(BaseModel):
+    token: str = ""
+    old_password: str = ""
+    new_password: str = ""
+
+
 @app.on_event("startup")
 def startup() -> None:
     db = get_db()
@@ -885,6 +898,49 @@ def me(token: str = "") -> JSONResponse:
             "phone": user.get("phone") or "",
         }
     )
+
+
+@app.post("/api/profile")
+def update_profile(req: ProfileUpdateRequest) -> JSONResponse:
+    db = get_db()
+    user = db.get_user_by_token(req.token)
+    if not user:
+        return JSONResponse({"error": "kirish talab qilinadi"}, status_code=401)
+    db.update_profile(
+        user["id"],
+        name=(req.name.strip()[:40] or None),
+        surname=(req.surname.strip()[:40] or None),
+        phone=(req.phone.strip()[:30] or None),
+    )
+    user = db.get_user(user["id"])
+    return JSONResponse(
+        {
+            "ok": True,
+            "username": user["username"],
+            "name": user["name"] or user["username"],
+            "surname": user.get("surname") or "",
+            "email": user.get("email") or "",
+            "phone": user.get("phone") or "",
+        }
+    )
+
+
+@app.post("/api/change-password")
+def change_password(req: ChangePasswordRequest) -> JSONResponse:
+    db = get_db()
+    user = db.get_user_by_token(req.token)
+    if not user:
+        return JSONResponse({"error": "kirish talab qilinadi"}, status_code=401)
+    if len(req.new_password) < 4:
+        return JSONResponse(
+            {"error": "yangi parol kamida 4 belgidan iborat bo'lishi kerak"},
+            status_code=400,
+        )
+    old_hash = db.get_password_hash(user["id"]) or ""
+    if not verify_password(req.old_password, old_hash):
+        return JSONResponse({"error": "eski parol noto'g'ri"}, status_code=400)
+    db.set_password_hash(user["id"], hash_password(req.new_password))
+    return JSONResponse({"ok": True})
 
 
 @app.post("/api/rename")

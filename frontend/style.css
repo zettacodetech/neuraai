@@ -618,3 +618,59 @@ html.kb-open .layout { height: var(--kb, 100dvh); }
 }
 .status .dot { box-shadow: 0 0 0 0 rgba(52,211,153,0.5); animation: pulse 1.8s infinite; }
 .msg-in { animation: fadeUp 0.3s ease both; }
+
+/* ==================== yangi: qanday ishlatiladi ==================== */
+.steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-top: 26px; }
+@media (max-width: 860px) { .steps { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 480px) { .steps { grid-template-columns: 1fr; } }
+.step {
+  background: linear-gradient(160deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
+  border: 1px solid var(--border); border-radius: var(--radius); padding: 20px;
+  transition: transform 0.25s, border-color 0.25s;
+}
+.step:hover { transform: translateY(-4px); border-color: rgba(143,123,255,0.5); }
+.step b {
+  display: grid; place-items: center; width: 34px; height: 34px; border-radius: 11px;
+  background: var(--grad); color: #fff; font-size: 1.05rem; margin-bottom: 12px;
+  box-shadow: 0 6px 18px rgba(109,92,255,0.4);
+}
+.step h4 { margin: 0 0 6px; font-size: 1.02rem; }
+.step p { margin: 0; color: var(--muted); font-size: 0.88rem; line-height: 1.55; }
+
+/* ---------- profil tugmasi (sidebar) ---------- */
+.user-card {
+  display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0;
+  padding: 8px 10px; border-radius: 12px; text-align: left;
+  transition: background 0.2s; border: 1px solid transparent;
+}
+.user-card:hover { background: var(--panel2); border-color: var(--border); }
+
+/* ---------- nusxalash tugmasi ---------- */
+.row.ai .bubble { position: relative; padding-top: 14px; }
+.copy-btn {
+  position: absolute; top: 8px; right: 10px; width: 26px; height: 26px;
+  display: grid; place-items: center; border-radius: 8px;
+  color: var(--muted); opacity: 0; transition: opacity 0.2s, background 0.2s, color 0.2s;
+}
+.row.ai .bubble:hover .copy-btn { opacity: 1; }
+.copy-btn:hover { background: var(--panel2); color: var(--text); }
+.copy-btn.ok { opacity: 1; color: #34d399; }
+@media (max-width: 900px) { .copy-btn { opacity: 1; } }
+
+/* ---------- profil modal ---------- */
+.profile-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+@media (max-width: 420px) { .profile-grid { grid-template-columns: 1fr; } }
+.field input:disabled { opacity: 0.55; cursor: not-allowed; }
+.profile-divider {
+  display: flex; align-items: center; gap: 12px; margin: 20px 0 14px;
+  color: var(--muted); font-size: 0.8rem; font-weight: 600;
+}
+.profile-divider::before, .profile-divider::after {
+  content: ""; flex: 1; height: 1px; background: linear-gradient(90deg, transparent, var(--border));
+}
+.profile-divider::after { background: linear-gradient(90deg, var(--border), transparent); }
+#passForm .ghost-btn { width: 100%; }
+.profile-actions { margin-top: 18px; border-top: 1px solid var(--border); padding-top: 16px; }
+.profile-actions .ghost-btn { width: 100%; }
+#profileAvatar { font-size: 1.7rem; }
+.modal-logo { text-transform: none; }
