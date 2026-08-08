@@ -6,10 +6,15 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 # Asosiy paketlar
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 python3-pip python3-venv curl git bash tzdata \
+    python3 python3-pip python3-venv curl git bash tzdata zstd \
     && rm -rf /var/lib/apt/lists/*
 
-# Ollama (mahalliy modellar uchun)
+# Aider — system pip'ni chetlab o'tib venv'ga o'rnatamiz (PEP 668)
+RUN python3 -m venv /opt/aider \
+    && /opt/aider/bin/pip install --no-cache-dir aider-chat \
+    && ln -sf /opt/aider/bin/aider /usr/local/bin/aider
+
+# Ollama (mahalliy modellar uchun) — zstd talab qiladi (yuqorida o'rnatildi)
 RUN curl -fsSL https://ollama.com/install.sh | sh || true
 
 # Kilo Code CLI
@@ -18,9 +23,6 @@ RUN npm install -g @kilocode/cli
 # OpenCode CLI
 RUN curl -fsSL https://opencode.ai/install | bash || true
 ENV PATH="/root/.opencode/bin:${PATH}"
-
-# Aider
-RUN pip3 install --no-cache-dir aider-chat
 
 # neura_cli — backend kodini ko'chirish
 WORKDIR /app
