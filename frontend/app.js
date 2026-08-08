@@ -730,9 +730,7 @@ function newChat() {
 /* ================= hisob ================= */
 
 function openAuth(mode = "") {
-  if (mode) setMode(mode);
-  authBackdrop.hidden = false;
-  setTimeout(() => fUsername.focus(), 60);
+  location.href = mode === "register" ? "/register" : "/login";
 }
 function closeAuth() { authBackdrop.hidden = true; }
 
@@ -1007,7 +1005,7 @@ profileBackdrop.addEventListener("click", (e) => {
 
 /* ================= landing interaktiv ================= */
 
-document.getElementById("landingLoginBtn").onclick = () => openAuth();
+document.getElementById("landingLoginBtn").onclick = () => openAuth("login");
 document.getElementById("heroStartBtn").onclick = () => openAuth("register");
 document.getElementById("heroHowBtn").onclick = () => {
   document.getElementById("features").scrollIntoView({ behavior: "smooth" });
@@ -1065,7 +1063,7 @@ modalClose.onclick = closeAuth;
 authBackdrop.addEventListener("click", (e) => { if (e.target === authBackdrop) closeAuth(); });
 document.querySelectorAll(".tab").forEach((t) => t.addEventListener("click", () => setMode(t.dataset.mode)));
 
-loginTopBtn.onclick = () => openAuth();
+loginTopBtn.onclick = () => openAuth("login");
 aboutBtn.onclick = openAbout;
 aboutClose.onclick = () => { aboutBackdrop.hidden = true; };
 aboutBackdrop.addEventListener("click", (e) => { if (e.target === aboutBackdrop) aboutBackdrop.hidden = true; });

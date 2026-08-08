@@ -155,6 +155,16 @@ def index() -> FileResponse:
     return FileResponse(os.path.join(FRONTEND, "index.html"))
 
 
+@app.get("/login")
+def login_page() -> FileResponse:
+    return FileResponse(os.path.join(FRONTEND, "login.html"))
+
+
+@app.get("/register")
+def register_page() -> FileResponse:
+    return FileResponse(os.path.join(FRONTEND, "register.html"))
+
+
 @app.get("/apk/neuraai.apk")
 def apk_download() -> FileResponse:
     """Android APK — yuklab olish (fayl frontend/apk/ dan xizmat qilinadi)."""

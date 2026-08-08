@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#05060f" />
+  <title>Kirish — InomjonAI</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <style>
+    .auth-page {
+      min-height: 100dvh; display: flex; align-items: center; justify-content: center;
+      padding: 18px; position: relative; z-index: 1;
+    }
+    .auth-card {
+      width: 100%; max-width: 400px; border-radius: 24px; padding: 30px 26px;
+      animation: modal-pop 0.5s cubic-bezier(0.22, 1.61, 0.36, 1);
+    }
+    .auth-logo { width: 62px; height: 62px; border-radius: 20px; margin: 0 auto 14px; overflow: hidden;
+      display: grid; place-items: center; box-shadow: 0 14px 40px rgba(109,92,255,0.5);
+      animation: float 5s ease-in-out infinite; }
+    .auth-logo img { width: 100%; height: 100%; object-fit: cover; }
+    .auth-card h1 { text-align: center; margin: 0 0 6px; font-size: 1.6rem; font-weight: 800; }
+    .auth-sub { text-align: center; color: var(--muted); margin: 0 0 22px; font-size: 0.92rem; line-height: 1.5; }
+    .auth-err { display: none; background: rgba(248,113,113,0.12); border: 1px solid rgba(248,113,113,0.35);
+      color: #fca5a5; border-radius: 12px; padding: 10px 14px; font-size: 0.85rem; margin-bottom: 14px; }
+    .auth-ok { display: none; background: rgba(52,211,153,0.12); border: 1px solid rgba(52,211,153,0.35);
+      color: #6ee7b7; border-radius: 12px; padding: 10px 14px; font-size: 0.85rem; margin-bottom: 14px; }
+    .auth-switch { text-align: center; margin-top: 18px; font-size: 0.88rem; color: var(--muted); }
+    .auth-switch a { color: var(--violet2); font-weight: 600; text-decoration: none; }
+    .auth-switch a:hover { text-decoration: underline; }
+    .auth-home { display: flex; justify-content: center; margin-top: 14px; font-size: 0.85rem; }
+    .auth-home a { color: var(--muted); text-decoration: none; display: inline-flex; gap: 6px; align-items: center; }
+    .auth-home a:hover { color: var(--text); }
+    .auth-submit { width: 100%; padding: 14px; border-radius: 14px; font-size: 1rem; font-weight: 700;
+      background: var(--grad); color: #fff; border: none; cursor: pointer;
+      transition: transform 0.2s; }
+    .auth-submit:hover { transform: translateY(-2px); }
+    .auth-submit:active { transform: scale(0.97); }
+    .auth-submit:disabled { opacity: 0.6; transform: none; }
+  </style>
+</head>
+<body>
+  <main class="auth-page">
+    <div class="auth-card glass">
+      <div class="auth-logo"><img src="/static/icons/logo.png" alt="InomjonAI" /></div>
+      <h1>Xush kelibsiz!</h1>
+      <p class="auth-sub">Hisobingizga kirib suhbatni davom ettiring</p>
+      <div class="auth-err" id="authErr"></div>
+      <div class="auth-ok" id="authOk"></div>
+      <form id="authForm" novalidate>
+        <div class="field">
+          <label for="fEmail">Email</label>
+          <input id="fEmail" type="email" placeholder="ism@mail.com" autocomplete="email" required />
+        </div>
+        <div class="field">
+          <label for="fPassword">Parol</label>
+          <input id="fPassword" type="password" placeholder="••••••••" autocomplete="current-password" required />
+        </div>
+        <button class="auth-submit" id="authSubmit" type="submit">Kirish</button>
+      </form>
+      <div class="auth-switch">
+        Hisobingiz yo'qmi? <a href="/register">Ro'yxatdan o'ting</a>
+      </div>
+      <div class="auth-home"><a href="/">← Bosh sahifaga qaytish</a></div>
+    </div>
+  </main>
+
+  <script>
+    let CLIENT_ID = localStorage.getItem("neura_uid");
+    if (!CLIENT_ID) {
+      CLIENT_ID = "u" + Date.now() + Math.random().toString(36).slice(2, 10);
+      localStorage.setItem("neura_uid", CLIENT_ID);
+    }
+
+    const form = document.getElementById("authForm");
+    const err = document.getElementById("authErr");
+    const ok = document.getElementById("authOk");
+    const btn = document.getElementById("authSubmit");
+
+    function cacheUser(u) {
+      try { localStorage.setItem("neura_user", JSON.stringify(u)); } catch (e) {}
+    }
+
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      err.style.display = "none";
+      ok.style.display = "none";
+      const email = document.getElementById("fEmail").value.trim().toLowerCase();
+      const password = document.getElementById("fPassword").value;
+      if (!email.includes("@")) { err.textContent = "To'g'ri email kiriting (masalan: ism@mail.com)"; err.style.display = "block"; return; }
+      if (password.length < 6) { err.textContent = "Parol kamida 6 ta belgidan iborat bo'lsin"; err.style.display = "block"; return; }
+      btn.disabled = true;
+      btn.textContent = "Kirilmoqda...";
+      try {
+        const res = await fetch("/api/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, password, client_id: CLIENT_ID }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "xato");
+        localStorage.setItem("neura_token", data.token);
+        cacheUser({ username: data.username, name: data.name, surname: data.surname || "", email: data.email || "", phone: data.phone || "" });
+        ok.textContent = "Muvaffaqiyatli kirdingiz!";
+        ok.style.display = "block";
+        setTimeout(() => { location.href = "/"; }, 350);
+      } catch (ex) {
+        err.textContent = ex.message || "Xatolik yuz berdi. Qayta urinib ko'ring.";
+        err.style.display = "block";
+        btn.disabled = false;
+        btn.textContent = "Kirish";
+      }
+    };
+  </script>
+</body>
+</html>
