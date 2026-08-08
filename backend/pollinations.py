@@ -81,18 +81,18 @@ def generate_audio(
     *,
     voice: str | None = None,
     model: str | None = None,
-) -> bytes | None:
-    """Matndi ovozga aylantiradi (TTS). WAV/MP3 bytes qaytaradi."""
+) -> tuple[bytes | None, str | None]:
+    """Matndi ovozga aylantiradi (TTS). (bytes, err) qaytaradi."""
     url = (
         f"{BASE}/audio/{urllib.parse.quote(text, safe='')}"
         f"?model={model or _AUD_MODEL}&voice={voice or _VOICE}&referrer=neuraai"
     )
     data, err = _get(url)
-    if data is None:
-        return None
-    return data
+    return data, err
 
 
-def generate_music(prompt: str, *, model: str | None = None) -> bytes | None:
-    """Qo'shiq/musiqa generatsiya (elevenmusic). WAV/MP3 qaytaradi."""
+def generate_music(
+    prompt: str, *, model: str | None = None
+) -> tuple[bytes | None, str | None]:
+    """Qo'shiq/musiqa generatsiya (elevenmusic). (bytes, err) qaytaradi."""
     return generate_audio(prompt, voice=None, model=model or _MUS_MODEL)

@@ -906,59 +906,49 @@ class MusicRequest(BaseModel):
 @app.post("/api/generate-music")
 async def generate_music(req: MusicRequest) -> JSONResponse:
     """Qo'shiq/musiqa generatsiya: Pollinations (elevenmusic) → Suno API."""
-    # 1) Pollinations elevenmusic (bepul/бalans kerak bo'lsa 402 → Suno)
+    hint = (
+        "Kalit holati: gen.pollinations.ai dan `Bearer` so'rov talab qilinadi. "
+        "Yangi kalit: https://enter.pollinations.ai (bepul kreditlar bor). "
+        "Yoki Suno lokal: `git clone https://github.com/suno-ai/suno-api && npm install && npm start` (port 3000, SUNO_API_URL env)"
+    )
     try:
         import pollinations
 
-        if pollinations.available():
-            data = pollinations.generate_music(req.prompt)
-            if data:
-                name = f"poll_music_{int(time.time() * 1000) % 1000000}.mp3"
-                path = os.path.join(GEN_DIR, name)
-                with open(path, "wb") as f:
-                    f.write(data)
+        if not pollinations.available():
+            return JSONResponse(
+                {"error": "POLLINATIONS_API_KEY o'rnatilmagan serverda", "hint": hint},
+                status_code=503,
+            )
+        data, err = pollinations.generate_music(req.prompt)
+        if not data:
+            if err == "HTTP 401":
                 return JSONResponse(
                     {
-                        "success": True,
-                        "audio_url": _gen_url(path),
-                        "provider": "pollinations",
-                    }
+                        "error": "Pollinations API kaliti eskirgan yoki bekor qilingan (401)",
+                        "hint": hint,
+                    },
+                    status_code=502,
                 )
-    except Exception:
-        pass
-
-    # 2) Suno API (lokal yoki bulut) — eski usul
-    suno_url = os.environ.get("SUNO_API_URL", "http://localhost:3000/api/generate")
-    try:
-        payload = json.dumps(
-            {
-                "prompt": req.prompt,
-                "tags": req.tags,
-                "title": req.title,
-                "make_instrumental": req.instrumental,
-                "wait_audio": True,
-            }
-        ).encode()
-
-        req_obj = urllib.request.Request(
-            suno_url,
-            data=payload,
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        with urllib.request.urlopen(req_obj, timeout=120) as r:
-            data = json.loads(r.read().decode())
-
-        audio_url = data[0].get("audio_url") if data else None
+            if err and err.startswith("HTTP 402"):
+                return JSONResponse(
+                    {"error": "Pollinations balansi yetarli emas (402)", "hint": hint},
+                    status_code=402,
+                )
+            raise RuntimeError(err or "javob yo'q")
+        name = f"poll_music_{int(time.time() * 1000) % 1000000}.mp3"
+        path = os.path.join(GEN_DIR, name)
+        with open(path, "wb") as f:
+            f.write(data)
         return JSONResponse(
-            {"success": True, "audio_url": audio_url, "provider": "suno"}
+            {
+                "success": True,
+                "audio_url": _gen_url(path),
+                "provider": "pollinations",
+            }
         )
     except Exception as e:
         return JSONResponse(
-            {
-                "error": f"Musiqa generatsiya xato: {e}",
-                "hint": "Pollinations hisobida balans kerak (enter.pollinations.ai). Suno lokal: `git clone https://github.com/suno-ai/suno-api && cd suno-api && npm install && npm start` (port 3000)",
-            },
+            {"error": f"Musiqa generatsiya xato: {e}", "hint": hint},
             status_code=503,
         )
 
@@ -980,12 +970,23 @@ async def generate_voice(req: VoiceRequest) -> JSONResponse:
             return JSONResponse(
                 {"error": "POLLINATIONS_API_KEY o'rnatilmagan"}, status_code=503
             )
-        data = pollinations.generate_audio(req.text.strip(), voice=req.voice or None)
+        data, err = pollinations.generate_audio(
+            req.text.strip(), voice=req.voice or None
+        )
         if not data:
-            return JSONResponse(
-                {"error": "Pollinations balansi yetarli emas yoki xato"},
-                status_code=402,
-            )
+            if err == "HTTP 401":
+                return JSONResponse(
+                    {
+                        "error": "Pollinations API kaliti eskirgan yoki bekor qilingan (401)"
+                    },
+                    status_code=502,
+                )
+            if err and err.startswith("HTTP 402"):
+                return JSONResponse(
+                    {"error": "Pollinations balansi yetarli emas (402)"},
+                    status_code=402,
+                )
+            raise RuntimeError(err or "javob yo'q")
         name = f"poll_voice_{int(time.time() * 1000) % 1000000}.mp3"
         path = os.path.join(GEN_DIR, name)
         with open(path, "wb") as f:
