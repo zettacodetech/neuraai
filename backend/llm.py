@@ -501,6 +501,12 @@ def _build_providers() -> list:
     ollama_model = os.environ.get("OLLAMA_MODEL", "llama3.3:8b")
     providers.append(_OllamaProvider(ollama_url, ollama_model))
 
+    # 7b. Ikkinchi Ollama server (masalan, Railway'da 2-xizmat) — OLLAMA_BASE_URL_2
+    ollama2_url = os.environ.get("OLLAMA_BASE_URL_2", "").strip()
+    ollama2_model = os.environ.get("OLLAMA_MODEL_2", "").strip()
+    if ollama2_url:
+        providers.append(_OllamaProvider(ollama2_url, ollama2_model or ollama_model))
+
     # 8. Groq
     groq_key = (
         os.environ.get("NEURA_LLM_API_KEY", "").strip()

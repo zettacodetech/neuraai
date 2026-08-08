@@ -1034,34 +1034,50 @@ async def stt(file: UploadFile = File(...)) -> JSONResponse:
 # ================= Lokal AI (Ollama) =================
 
 
-def _ollama_provider():
+def _ollama_providers():
     try:
         import llm as llm_mod
 
-        for p in llm_mod.LLM_PROVIDERS:
-            if isinstance(p, llm_mod._OllamaProvider):
-                return p
+        return [
+            p for p in llm_mod.LLM_PROVIDERS if isinstance(p, llm_mod._OllamaProvider)
+        ]
     except Exception:
         pass
-    return None
+    return []
+
+
+def _ollama_provider():
+    providers = _ollama_providers()
+    return providers[0] if providers else None
 
 
 @app.get("/api/local-ai")
 def local_ai_status() -> JSONResponse:
     """Lokal AI holati: Ollama ishlayaptimi, qaysi modellar bor."""
-    prov = _ollama_provider()
-    if not prov:
+    providers = _ollama_providers()
+    if not providers:
         return JSONResponse({"success": False, "error": "Ollama sozlanmagan"})
-    models = prov.installed_models()
-    configured = prov.model
+    servers = []
+    for prov in providers:
+        servers.append(
+            {
+                "base_url": prov.base_url,
+                "available": prov.available,
+                "configured_model": prov.model,
+                "configured_installed": prov.model_installed(prov.model),
+                "models": prov.installed_models(),
+            }
+        )
+    main = providers[0]
     return JSONResponse(
         {
             "success": True,
-            "available": prov.available,
-            "base_url": prov.base_url,
-            "configured_model": configured,
-            "configured_installed": prov.model_installed(configured),
-            "models": models,
+            "available": main.available,
+            "base_url": main.base_url,
+            "configured_model": main.model,
+            "configured_installed": main.model_installed(main.model),
+            "models": main.installed_models(),
+            "servers": servers,
             "provider_order": [
                 os.environ.get("NEURA_LLM_PROVIDER", "auto"),
             ],
@@ -1073,6 +1089,7 @@ def local_ai_status() -> JSONResponse:
 class LocalAiPullRequest(BaseModel):
     admin_key: str = ""
     model: str = ""
+    server: int = 0
 
 
 @app.post("/api/local-ai/pull")
@@ -1080,9 +1097,15 @@ def local_ai_pull(req: LocalAiPullRequest) -> JSONResponse:
     """Model yuklab olish (admin). Yangi model fon'da yuklanadi."""
     if req.admin_key != ADMIN_KEY:
         return JSONResponse({"error": "admin kaliti kerak"}, status_code=401)
-    prov = _ollama_provider()
-    if not prov:
+    providers = _ollama_providers()
+    if not providers:
         return JSONResponse({"error": "Ollama sozlanmagan"}, status_code=503)
+    if req.server >= len(providers):
+        return JSONResponse(
+            {"error": f"Server indeksi {req.server} mavjud emas"},
+            status_code=400,
+        )
+    prov = providers[req.server]
     name = (req.model or "").strip()
     if not name:
         name = prov.model

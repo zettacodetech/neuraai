@@ -5,14 +5,20 @@ echo "=== Ollama modellarni yuklash boshlandi ==="
 
 # 8GB RAM chetıkligi uchun yengil-ro`yhat:
 # Har bir model xotirasi: 1.5b~1GB, 3b~2GB, 7-8b~5GB — bir vaqtda 2 tadan yuklaymiz
-MODELS=(
-    "llama3.2:3b"          # Yengil chat (tezkor)
-    "deepseek-r1:1.5b"     # Yengil reasoning
-    "qwen2.5-coder:7b"     # Kod yozish
-    "deepseek-r1:7b"       # Reasoning
-    "mistral:7b"           # Universal chat
-    "llama3.2:1b"          # Ultra yengil tezkorlik
-)
+# MODELS_LIST env berilsa — shu ro'yxat ishlatiladi (2-xizmat uchun)
+if [ -n "$MODELS_LIST" ]; then
+    MODELS=()
+    IFS=' ' read -r -a MODELS <<< "$MODELS_LIST"
+else
+    MODELS=(
+        "llama3.2:3b"          # Yengil chat (tezkor)
+        "deepseek-r1:1.5b"     # Yengil reasoning
+        "qwen2.5-coder:7b"     # Kod yozish
+        "deepseek-r1:7b"       # Reasoning
+        "mistral:7b"           # Universal chat
+        "llama3.2:1b"          # Ultra yengil tezkorlik
+    )
+fi
 
 # Railway PORT oralig'ida ishlash uchun OLLAMA_HOST ni set qilish
 export OLLAMA_HOST="0.0.0.0:${PORT:-11434}"
