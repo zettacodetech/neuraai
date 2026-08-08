@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 import tempfile
 import threading
@@ -299,48 +300,64 @@ def version() -> JSONResponse:
 
 # ================= suhbat =================
 
+_ANALYSIS_RE = re.compile(
+    r"(tahlil|analiz|izohla|tarifla|tushuntir|bilasan?mi|oladimi|"
+    r"mumkinmi|nima degan|qanday qilin|\bwhat\b|\bwhy\b|\bhow\b)"
+)
+_QUESTION_RE = re.compile(r"\b(nima|nega|qachon|qanday|qayer|kim|nechta)\b|\?")
+_IMG_RE = re.compile(r"(rasim|rasm|surot|surat|tasvir|image|\bphoto\b)")
+_VID_RE = re.compile(r"(video|vidio)")
+_PAINT_RE = re.compile(r"(chiz|draw|paint)")
+_MAKE_RE = re.compile(r"(yarat|yasa|create|make|generate)")
+_SCENE_RE = re.compile(
+    r"(tog'|daryo|o'rmon|dengiz|osmon|quyosh|botish|chiqish|"
+    r"shahar|qishloq|manzara|panorama|tabiat|portret)"
+)
+_GEN_STRIP_RE = re.compile(
+    r"\w*(chiz|yarat|yasa|qil|draw|paint|create|make|generate)\w*"
+)
+_GEN_WORDS_RE = re.compile(r"\b(ber|berib|tashla|uchun)\b", re.IGNORECASE)
+_TEXT_CLEAN_RE = re.compile(r"[\s:;,.\-]+")
+
 
 def _gen_request(text: str) -> tuple[str, str] | None:
     """Rasm/video generatsiya so'rovini aniqlaydi.
-    Qaytaradi: ('image'|'video', prompt) yoki None."""
-    import re
 
+    Qaytaradi: ('image'|'video', prompt) yoki None. "rasm/video" so'zisiz
+    ham aniqlay oladi — masalan "dengiz bo'yda quyosh botishini chiz".
+    """
     t = text.strip()
     low = t.lower()
-    # Tahlil / savol so'zlari — generatsiya EMAS
-    if re.search(r"(tahlil|analiz|izohla|tarifla|bilasan?mi|oladimi|mumkinmi)", low):
-        return None
-    has_img = bool(re.search(r"(rasim|rasm|surat|surot)", low))
-    has_video = bool(re.search(r"\bvideo\b", low))
-    has_verb = bool(re.search(r"(chiz|yarat|yasa|qil|draw|paint|create|make|gen)", low))
-    if (not has_img and not has_video) or not has_verb:
+    # Tahlil / savol — generatsiya EMAS
+    if _ANALYSIS_RE.search(low) or _QUESTION_RE.search(low):
         return None
 
-    if has_img and not has_video:
-        kind = "image"
-        prompt = re.sub(r"(rasim|rasm|surat|surot)", " ", t, flags=re.IGNORECASE)
-    elif has_video and not has_img:
-        kind = "video"
-        prompt = re.sub(r"^\s*video\b\s*", "", t, flags=re.IGNORECASE)
+    has_video = bool(_VID_RE.search(low))
+    has_img = bool(_IMG_RE.search(low))
+    # Video birinchi (aniq kalit so'z)
+    if has_video:
+        return ("video", _gen_prompt(t, "video"))
+    if has_img:
+        return ("image", _gen_prompt(t, "image"))
+    # "chizib ber" — rasim so'zisiz ham rasm
+    if _PAINT_RE.search(low):
+        return ("image", _gen_prompt(t, "image"))
+    # Sahna ta'rifi + yaratish fe'li
+    if _SCENE_RE.search(low) and _MAKE_RE.search(low):
+        return ("image", _gen_prompt(t, "image"))
+    return None
+
+
+def _gen_prompt(text: str, kind: str) -> str:
+    """Rasm/video markerlari va fe'llarini olib, aniq prompt qoldiradi."""
+    prompt = text
+    if kind == "video":
+        prompt = re.sub(r"^\s*(?:video|vidio)\b\s*:?", "", prompt, flags=re.IGNORECASE)
     else:
-        kind = "video" if low.index("video") < low.index("rasm") else "image"
-        prompt = re.sub(r"(rasim|rasm|surat|surot)", " ", t, flags=re.IGNORECASE)
-        if kind == "video":
-            prompt = re.sub(r"^\s*video\b\s*", "", prompt, flags=re.IGNORECASE)
-
-    prompt = re.sub(
-        r"\w*(chiz|yarat|yasa|qil|draw|paint|create|make)\w*",
-        " ",
-        prompt,
-        flags=re.IGNORECASE,
-    )
-    prompt = re.sub(
-        r"\b(ber|bеr|bеrib|berib|tashla)\b", " ", prompt, flags=re.IGNORECASE
-    )
-    prompt = re.sub(r"[\s:;,.\-]+", " ", prompt).strip()
-    if len(prompt) < 2:
-        prompt = ""  # "rasim chizib ber" kabi — default sahnaga o'tadi
-    return (kind, prompt)
+        prompt = _IMG_RE.sub(" ", prompt)
+    prompt = _GEN_STRIP_RE.sub(" ", prompt)
+    prompt = _GEN_WORDS_RE.sub(" ", prompt)
+    return _TEXT_CLEAN_RE.sub(" ", prompt).strip()
 
 
 @app.post("/api/chat")

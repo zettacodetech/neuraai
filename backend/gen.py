@@ -353,8 +353,10 @@ def generate_image(prompt: str) -> str:
 def generate_video(prompt: str) -> str:
     """Prompt'a mos qisqa video (MP4) yarat.
 
-    Tartib: Pollinations (real AI) → JSON2Video (real render) → deAPI
-    (LTX-Video) → Magic Hour (haqiqiy AI) → GPU SVD → protsur animatsiya.
+    Tartib: Pollinations (real AI) → deAPI (LTX-Video) → Magic Hour
+    (haqiqiy AI) → GPU SVD → JSON2Video (so'nggi zaxira) → protsur
+    animatsiya. JSON2Video promptni matn sifatida ekranda ko'rsatadi
+    (real AI emas) — shuning uchun u haqiqiy AI provayderlardan keyin.
     O'zbekcha so'rovlar avval inglizchaga tarjima qilinadi.
     """
     prompt = _english_prompt(prompt)
@@ -371,17 +373,6 @@ def generate_video(prompt: str) -> str:
                 )
                 with open(path, "wb") as f:
                     f.write(data)
-                return path
-    except Exception:
-        pass
-
-    try:
-        from json2video import available as j2v_available
-        from json2video import generate_video as j2v_video
-
-        if j2v_available():
-            path = j2v_video(prompt)
-            if path:
                 return path
     except Exception:
         pass
@@ -426,6 +417,18 @@ def generate_video(prompt: str) -> str:
                 generator=gen,
                 num_frames=25,
             ).frames[0]
+        except Exception:
+            pass
+
+    if not frames:
+        try:
+            from json2video import available as j2v_available
+            from json2video import generate_video as j2v_video
+
+            if j2v_available():
+                path = j2v_video(prompt)
+                if path:
+                    return path
         except Exception:
             pass
 

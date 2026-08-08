@@ -826,6 +826,8 @@ if ("serviceWorker" in navigator) {
       document.documentElement.classList.add("kb-open");
       composer.style.paddingBottom = "calc(14px + " + offset + "px)";
       setTimeout(() => composer.scrollIntoView({ block: "nearest" }), 80);
+      const chatEl = document.querySelector(".chat");
+      if (chatEl) setTimeout(() => chatEl.scrollTo({ top: chatEl.scrollHeight }), 120);
     } else {
       document.documentElement.classList.remove("kb-open");
       composer.style.paddingBottom = "";
