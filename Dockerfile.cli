@@ -32,6 +32,10 @@ COPY backend/ /app/
 RUN python3 -m venv /app/.clivenv \
     && /app/.clivenv/bin/pip install --no-cache-dir typer rich
 
+# 'neura' buyrug'i — web terminalda bevosita ishlatish uchun
+RUN printf '#!/bin/bash\nexec /app/.clivenv/bin/python -m neura_cli "$@"\n' > /usr/local/bin/neura \
+    && chmod +x /usr/local/bin/neura
+
 # Kichik modelni yuklab olish uchun entrypoint
 COPY cli-service/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh

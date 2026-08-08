@@ -32,7 +32,6 @@ echo "    neura chat                    — suhbat"
 echo "    neura fix <fayl>              — kod tuzatish"
 echo "    neura opencode / kilo / aider — agentic kodlash"
 echo "    neura ollama list             — mahalliy modellar"
-echo "  (Python: /app/.clivenv/bin/python -m neura_cli)"
 echo "============================================================"
 echo ""
 
