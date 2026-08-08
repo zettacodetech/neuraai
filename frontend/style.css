@@ -414,8 +414,17 @@ button:focus-visible, a:focus-visible, textarea:focus-visible, input:focus-visib
 .modal-backdrop {
   position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center;
   background: rgba(3,4,12,0.72); backdrop-filter: blur(8px); padding: 16px;
+  animation: modal-fade 0.3s ease-out;
 }
 .modal { width: 100%; max-width: 420px; border-radius: 22px; padding: 28px; position: relative; }
+.modal-backdrop > .modal {
+  animation: modal-pop 0.48s cubic-bezier(0.22, 1.61, 0.36, 1);
+}
+@keyframes modal-fade { from { opacity: 0; } }
+@keyframes modal-pop {
+  0%   { transform: translateY(34px) scale(0.82); opacity: 0; }
+  100% { transform: translateY(0) scale(1); opacity: 1; }
+}
 .modal-lg { max-width: 560px; }
 .modal-close { position: absolute; top: 14px; right: 14px; width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; color: var(--muted); }
 .modal-close:hover { background: var(--panel2); color: var(--text); }
@@ -535,10 +544,10 @@ button:focus-visible, a:focus-visible, textarea:focus-visible, input:focus-visib
   .plat-grid, .feat-cards, .support-cards, .model-cards { gap: 10px; }
 }
 
-/* modallar — mayda ekranlarda ekranga mos */
+/* modallar — mayda ekranlarda ham o'rtada qalqib chiqadi (bottom-sheet yo'q) */
 @media (max-width: 520px) {
-  .modal-backdrop { align-items: flex-end; padding: 0; }
-  .modal { max-width: 100%; border-radius: 22px 22px 0 0; padding: 24px 18px calc(18px + var(--safe-bottom)); }
+  .modal-backdrop { align-items: center; padding: 14px; }
+  .modal { max-width: 100%; border-radius: 22px; padding: 24px 18px calc(18px + var(--safe-bottom)); }
   .modal-lg { max-width: 100%; }
 }
 
