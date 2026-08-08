@@ -1054,3 +1054,102 @@ if (!reduceMotion) {
     });
   });
 }
+
+/* ================= 99D — jonli sayt effektlari ================= */
+
+// 1) aylanuvchi so'z (hero sarlavhada)
+const rotWord = document.getElementById("rotWord");
+const ROT_WORDS = ["suhbat", "chat", "kod yozish", "rasm yaratish", "tarjima", "video", "savollarga javob"];
+if (rotWord && !reduceMotion) {
+  let ri = 0;
+  setInterval(() => {
+    ri = (ri + 1) % ROT_WORDS.length;
+    rotWord.classList.add("out");
+    setTimeout(() => {
+      rotWord.textContent = ROT_WORDS[ri];
+      rotWord.classList.remove("out");
+    }, 380);
+  }, 2400);
+}
+
+// 2) yuguruvchi lenta (ticker) — imkoniyatlar
+const tickerTrack = document.getElementById("tickerTrack");
+if (tickerTrack) {
+  const tkItems = ["⚡ Tez javob", "🧠 Aqlli fikrlash", "🎨 Rasm yaratish", "🎬 Video", "🎵 Musiqa / Ovoz", "🌍 Internet qidiruvi", "💻 Kod yozish", "📷 Rasm tahlili", "🔑 Bepul API"];
+  const mk = () => tkItems.map((t) => "<span>" + t + "</span><i class='tk-star'>✦</i>").join("");
+  tickerTrack.innerHTML = mk() + mk();
+}
+
+// 3) skroll-reveal — bo'limlar jonlanadi
+if ("IntersectionObserver" in window) {
+  const io = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((en) => {
+        if (!en.isIntersecting) return;
+        en.target.classList.add("rv-in");
+        en.target.querySelectorAll("[data-st]").forEach((c, i) => {
+          c.style.transitionDelay = ((i % 4) * 90 + 40) + "ms";
+        });
+        io.unobserve(en.target);
+      });
+    },
+    { threshold: 0.12 }
+  );
+  document.querySelectorAll(".rv").forEach((el) => io.observe(el));
+  // xavfsizlik to'rigi: 3.5s ichida ko'rinmay qolgan bo'limlarni ochish
+  setTimeout(() => {
+    document.querySelectorAll(".rv:not(.rv-in)").forEach((el) => {
+      if (el.getBoundingClientRect().top < window.innerHeight) el.classList.add("rv-in");
+    });
+  }, 3500);
+} else {
+  document.querySelectorAll(".rv").forEach((el) => el.classList.add("rv-in"));
+}
+
+// 4) hisoblagichlar (hero-stats: 2 model / 4 platforma / 24)
+function animateCount(el, target) {
+  const t0 = performance.now();
+  const dur = 1100;
+  const tick = (t) => {
+    const p = Math.min((t - t0) / dur, 1);
+    el.textContent = Math.round(target * (1 - Math.pow(1 - p, 3)));
+    if (p < 1) requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
+function countUp(el, target) {
+  if (reduceMotion) { el.textContent = target; return; }
+  animateCount(el, target);
+}
+(function counters() {
+  const stats = document.querySelector(".hero-stats");
+  const els = document.querySelectorAll("[data-count]");
+  if (!els.length || !stats) return;
+  const run = () => els.forEach((el) => countUp(el, +el.dataset.count));
+  if (!reduceMotion && "IntersectionObserver" in window) {
+    const io2 = new IntersectionObserver((en) => {
+      en.forEach((e) => {
+        if (e.isIntersecting) { run(); io2.disconnect(); }
+      });
+    }, { threshold: 0.4 });
+    io2.observe(stats);
+  } else {
+    run();
+  }
+})();
+
+// 5) tugmalar bosilganda suv tomchisi (ripple)
+document.addEventListener("click", (e) => {
+  const btn = e.target.closest(".btn-primary, .l-cta, .auth-submit, .send-btn, .chip");
+  if (!btn || reduceMotion) return;
+  const r = btn.getBoundingClientRect();
+  const d = Math.max(r.width, r.height);
+  const sp = document.createElement("span");
+  sp.className = "ripple";
+  sp.style.width = d + "px";
+  sp.style.height = d + "px";
+  sp.style.left = (e.clientX - r.left - d / 2) + "px";
+  sp.style.top = (e.clientY - r.top - d / 2) + "px";
+  btn.appendChild(sp);
+  setTimeout(() => sp.remove(), 600);
+});
