@@ -494,6 +494,17 @@ async function send(text) {
             typing.remove();
             qMessage("ai", evt.reply || "⚠️ Xatolik yuz berdi.");
           } else if (evt.type === "done") {
+            typing.remove();
+            if (!ai) {
+              // Tezkor javob (intent/kod/bilim) — text eventlarsiz done kelgan
+              if (evt.reply) {
+                const made = aiRowBubble();
+                ai = made;
+                ai.bubble.innerHTML = renderText(evt.reply);
+                acc = evt.reply;
+                chat.appendChild(ai.row);
+              }
+            }
             if (ai) {
               ai.bubble.appendChild(voiceButton(acc));
               const copy = document.createElement("button");
@@ -510,9 +521,9 @@ async function send(text) {
               };
               ai.bubble.appendChild(copy);
               flashRow(ai.row);
-              if (currentConv === null) { currentConv = sseConv; }
               if (evt.message_id) addFeedback(ai.row, evt.message_id);
             }
+            if (sseConv !== null) currentConv = sseConv;
             finished = true;
           }
         }
