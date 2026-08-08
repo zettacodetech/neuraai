@@ -23,6 +23,7 @@ Provider tartibi: NEURA_LLM_PROVIDER env orqali tanlanadi
 import json
 import os
 import re
+import threading
 import urllib.request
 from collections.abc import Iterable
 
@@ -220,13 +221,17 @@ class _GeminiProvider:
 
 
 class _OllamaProvider:
-    """Lokal Ollama server (API key kerak emas). Vision ham qo'llab-quvvatlanadi."""
+    """Lokal Ollama server (API key kerak emas). Vision ham qo'llab-quvvatlanadi.
+
+    Agar OLLAMA_MODEL o'rnatilmagan bo'lsa — birinchi so'rovda avtomatik
+    `ollama pull` qilinadi (lokal, tez), shunda "lokal AI" xuddi ishlaydi.
+    """
 
     def __init__(self, base_url: str | None = None, model: str | None = None):
         self.base_url = base_url or os.environ.get(
             "OLLAMA_BASE_URL", "http://localhost:11434"
         )
-        self.model = model or os.environ.get("OLLAMA_MODEL", "llama3.3:8b")
+        self.model = model or os.environ.get("OLLAMA_MODEL", "llama3.2:1b")
 
     @property
     def available(self) -> bool:
@@ -237,6 +242,46 @@ class _OllamaProvider:
         except Exception:
             return False
 
+    def installed_models(self) -> list[str]:
+        try:
+            req = urllib.request.Request(f"{self.base_url}/api/tags", method="GET")
+            with urllib.request.urlopen(req, timeout=3) as r:
+                data = json.loads(r.read().decode())
+            return [m.get("name", "") for m in data.get("models", [])]
+        except Exception:
+            return []
+
+    def model_installed(self, model: str | None = None) -> bool:
+        name = model or self.model
+        return any(m == name for m in self.installed_models())
+
+    def ensure_model(self, model: str | None = None, background: bool = False) -> bool:
+        """Model yo'q bo'lsa `ollama pull` qiladi. True — model tayyor."""
+        name = model or self.model
+        if self.model_installed(name):
+            return True
+        if background:
+            threading.Thread(target=self.pull_model, args=(name,), daemon=True).start()
+            return False
+        return self.pull_model(name)
+
+    def pull_model(self, model: str | None = None, timeout: float = 900.0) -> bool:
+        name = model or self.model
+        try:
+            req = urllib.request.Request(
+                f"{self.base_url}/api/pull",
+                data=json.dumps({"model": name}).encode(),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                # stream=False bilan bitta JSON qaytadi
+                for _ in _iter_sse_lines(r):
+                    pass
+            return self.model_installed(name)
+        except Exception:
+            return False
+
     def chat(
         self,
         messages: list[dict],
@@ -244,6 +289,12 @@ class _OllamaProvider:
         max_tokens: int = 600,
         images: list[str] | None = None,
     ) -> str | None:
+        if not self.available:
+            return None
+        if not self.model_installed():
+            # Avtomatik pull (blokli, lekin lokal tez) — 1 ta urinish
+            if not self.pull_model():
+                return None
         # Ollama format: messages + images (base64)
         ollama_messages = []
         for m in messages:
@@ -285,6 +336,11 @@ class _OllamaProvider:
         max_tokens: int = 600,
     ) -> Iterable[str]:
         """Ollama streaming (JSONL bo'laklari) — matn bo'laklarini beradi."""
+        if not self.available:
+            return
+        if not self.model_installed():
+            if not self.pull_model():
+                return
         ollama_messages = []
         for m in messages:
             content = m["content"]
@@ -507,17 +563,21 @@ def llm_chat(
         return None
     chain = LLM_PROVIDERS
     if model:
-        resolved = model.strip().split(":")[-1].lstrip("~/")
-        d = model.strip().lstrip("~/")
+        if model.strip().lower() in ("local", "lokal", "offline", "ollama"):
+            # Lokal rejim — faqat Ollama ishlatiladi
+            chain = sorted(chain, key=lambda p: not isinstance(p, _OllamaProvider))
+        else:
+            resolved = model.strip().split(":")[-1].lstrip("~/")
+            d = model.strip().lstrip("~/")
 
-        def _rank(p):
-            pm = getattr(p, "model", "") or ""
-            pm = pm.strip().lstrip("~/")
-            if pm == d or pm.endswith(d) or d.endswith(pm) or resolved in pm:
-                return 0
-            return 1
+            def _rank(p):
+                pm = getattr(p, "model", "") or ""
+                pm = pm.strip().lstrip("~/")
+                if pm == d or pm.endswith(d) or d.endswith(pm) or resolved in pm:
+                    return 0
+                return 1
 
-        chain = sorted(chain, key=_rank)
+            chain = sorted(chain, key=_rank)
     last_error: Exception | None = None
     for provider in chain:
         if not provider.available:
@@ -526,7 +586,12 @@ def llm_chat(
             if hasattr(provider, "chat") and callable(provider.chat):
                 # Ollama / Gemini / DDG — o'z API formatiga ega
                 saved_model = getattr(provider, "model", None)
-                if model:
+                if model and model.strip().lower() not in (
+                    "local",
+                    "lokal",
+                    "offline",
+                    "ollama",
+                ):
                     provider.model = model  # type: ignore[attr-defined]
                 try:
                     content = provider.chat(
@@ -588,22 +653,31 @@ def llm_chat_stream(
         return
     chain = LLM_PROVIDERS
     if model:
-        resolved = model.strip().split(":")[-1].lstrip("~/")
-        d = model.strip().lstrip("~/")
+        if model.strip().lower() in ("local", "lokal", "offline", "ollama"):
+            # Lokal rejim — faqat Ollama ishlatiladi
+            chain = sorted(chain, key=lambda p: not isinstance(p, _OllamaProvider))
+        else:
+            resolved = model.strip().split(":")[-1].lstrip("~/")
+            d = model.strip().lstrip("~/")
 
-        def _rank(p):
-            pm = getattr(p, "model", "") or ""
-            pm = pm.strip().lstrip("~/")
-            if pm == d or pm.endswith(d) or d.endswith(pm) or resolved in pm:
-                return 0
-            return 1
+            def _rank(p):
+                pm = getattr(p, "model", "") or ""
+                pm = pm.strip().lstrip("~/")
+                if pm == d or pm.endswith(d) or d.endswith(pm) or resolved in pm:
+                    return 0
+                return 1
 
-        chain = sorted(chain, key=_rank)
+            chain = sorted(chain, key=_rank)
     for provider in chain:
         if not provider.available:
             continue
         saved_model = getattr(provider, "model", None)
-        if model:
+        if model and model.strip().lower() not in (
+            "local",
+            "lokal",
+            "offline",
+            "ollama",
+        ):
             provider.model = model  # type: ignore[attr-defined]
         try:
             got = False

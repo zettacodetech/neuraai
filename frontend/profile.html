@@ -47,6 +47,19 @@
       color: var(--muted); font-size: 0.8rem; font-weight: 600; }
     .profile-divider::before, .profile-divider::after { content: ""; flex: 1; height: 1px; background: linear-gradient(90deg, transparent, var(--border)); }
     .profile-divider::after { background: linear-gradient(90deg, var(--border), transparent); }
+    .tg-bind-btn {
+      width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px;
+      background: #2AABEE; color: #fff; font-weight: 700; font-size: 0.95rem;
+      padding: 13px; border-radius: 14px; transition: transform 0.2s, filter 0.2s;
+    }
+    .tg-bind-btn:hover { transform: translateY(-2px); filter: brightness(1.08); }
+    .tg-bind-btn:disabled { opacity: 0.6; transform: none; }
+    .tg-bind-btn.unbound { background: transparent; color: var(--muted); border: 1px solid rgba(248,113,113,0.35); }
+    .tg-bind-btn.unbound:hover { background: rgba(248,113,113,0.12); color: #fca5a5; filter: none; }
+    .tg-bind-status { display: flex; align-items: center; justify-content: space-between; gap: 10px;
+      background: rgba(42,171,238,0.1); border: 1px solid rgba(42,171,238,0.3); border-radius: 13px;
+      padding: 12px 14px; font-size: 0.88rem; margin-bottom: 10px; }
+    .tg-bind-status small { color: var(--muted); }
     @media (max-width: 520px) { .stat-grid { grid-template-columns: 1fr 1fr; } }
   </style>
 </head>
@@ -97,6 +110,13 @@
       </div>
       <div id="statsDetail"></div>
 
+      <div class="profile-divider">🤖 Telegram bog'lash</div>
+      <div class="tg-bind-status" id="tgBindStatus" hidden></div>
+      <button class="tg-bind-btn" id="tgBindBtn">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M11.94 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm4.8 6.9-1.6 7.6c-.12.55-.44.68-.9.42l-2.47-1.82-1.19 1.15c-.13.13-.25.25-.5.25l.18-2.53 4.6-4.16c.2-.18-.04-.28-.31-.1l-5.69 3.58-2.45-.77c-.53-.17-.54-.53.11-.78l9.56-3.69c.44-.16.83.1.69.85z"/></svg>
+        <span id="tgBindLabel">Telegram hisobini bog'lash</span>
+      </button>
+
       <div class="profile-divider">🔒 Parolni o'zgartirish</div>
       <form id="passForm" novalidate>
         <div class="field"><label for="pOldPass">Eski parol</label>
@@ -132,6 +152,60 @@
     else {
       const profileErr = document.getElementById("profileErr");
       const profileOk = document.getElementById("profileOk");
+
+      /* ================= Telegram bog'lash ================= */
+      const tgBtn = document.getElementById("tgBindBtn");
+      const tgLabel = document.getElementById("tgBindLabel");
+      const tgStatus = document.getElementById("tgBindStatus");
+      let tgLinked = null;
+
+      function renderTgBind() {
+        if (tgLinked) {
+          tgStatus.hidden = false;
+          tgStatus.innerHTML = "✅ Telegram bog'langan: <b>ID " + tgLinked + "</b><small>@InomjonAI_UzBot orqali avtomatik kira olasiz</small>";
+          tgBtn.classList.add("unbound");
+          tgLabel.textContent = "Bog'lashni bekor qilish";
+        } else {
+          tgStatus.hidden = true;
+          tgBtn.classList.remove("unbound");
+          tgLabel.textContent = "Telegram hisobini bog'lash";
+        }
+      }
+
+      tgBtn.onclick = async () => {
+        if (tgLinked) {
+          try {
+            await apiFetch("/api/tg-unbind", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ token }),
+            });
+            tgLinked = null;
+            renderTgBind();
+            showOk(profileOk, "Telegram bog'lash bekor qilindi");
+          } catch (ex) { showErr(profileErr, ex.message); }
+          return;
+        }
+        if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initData) {
+          tgBtn.disabled = true;
+          tgLabel.textContent = "Bog'lanmoqda...";
+          try {
+            await apiFetch("/api/tg-bind", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ token, initData: window.Telegram.WebApp.initData }),
+            });
+            tgLinked = window.Telegram.WebApp.initDataUnsafe.user.id;
+            renderTgBind();
+            showOk(profileOk, "Telegram muvaffaqiyatli bog'landi!");
+          } catch (ex) { showErr(profileErr, ex.message); }
+          tgBtn.disabled = false;
+          renderTgBind();
+        } else {
+          showErr(profileErr, "Bu tugma Telegram ilovasi ichida ishlaydi. Bot orqali oching: @InomjonAI_UzBot");
+        }
+      };
+
       apiFetch("/api/me?token=" + encodeURIComponent(token)).then(async (u) => {
         document.getElementById("profileSub").textContent = "@" + u.username;
         document.getElementById("pName").value = u.name || u.username || "";
@@ -139,6 +213,8 @@
         document.getElementById("pEmail").value = u.email || "";
         document.getElementById("pPhone").value = u.phone || "";
         localStorage.setItem("neura_user", JSON.stringify(u));
+        tgLinked = u.telegram_id || null;
+        renderTgBind();
         try {
           const st = await apiFetch("/api/stats?token=" + encodeURIComponent(token));
           document.querySelector("#statsGrid .stat-cell:nth-child(1) b").textContent = st.messages;

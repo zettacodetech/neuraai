@@ -38,6 +38,15 @@
     .auth-submit:hover { transform: translateY(-2px); }
     .auth-submit:active { transform: scale(0.97); }
     .auth-submit:disabled { opacity: 0.6; transform: none; }
+    .tg-divider { display: flex; align-items: center; gap: 12px; margin: 18px 0 14px; color: var(--muted); font-size: 0.8rem; }
+    .tg-divider::before, .tg-divider::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+    .tg-login-btn {
+      width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px;
+      background: #2AABEE; color: #fff; font-weight: 700; font-size: 0.98rem;
+      padding: 13px; border-radius: 14px; transition: transform 0.2s, filter 0.2s;
+    }
+    .tg-login-btn:hover { transform: translateY(-2px); filter: brightness(1.08); }
+    .tg-login-btn:disabled { opacity: 0.6; transform: none; }
   </style>
 </head>
 <body>
@@ -77,6 +86,11 @@
         </div>
         <button class="auth-submit" id="authSubmit" type="submit">Ro'yxatdan o'tish</button>
       </form>
+      <div class="tg-divider"><span>yoki</span></div>
+      <button class="tg-login-btn" id="tgLoginBtn">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M11.94 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm4.8 6.9-1.6 7.6c-.12.55-.44.68-.9.42l-2.47-1.82-1.19 1.15c-.13.13-.25.25-.5.25l.18-2.53 4.6-4.16c.2-.18-.04-.28-.31-.1l-5.69 3.58-2.45-.77c-.53-.17-.54-.53.11-.78l9.56-3.69c.44-.16.83.1.69.85z"/></svg>
+        Telegram orqali tez kirish
+      </button>
       <div class="auth-switch">
         Hisobingiz bormi? <a href="/login">Kiring</a>
       </div>
@@ -95,6 +109,43 @@
     const err = document.getElementById("authErr");
     const ok = document.getElementById("authOk");
     const btn = document.getElementById("authSubmit");
+
+    /* ================= Telegram orqali tez kirish ================= */
+    const tgBtn = document.getElementById("tgLoginBtn");
+
+    function tgLoginWithInitData(initData) {
+      tgBtn.disabled = true;
+      tgBtn.textContent = "Kirilmoqda...";
+      fetch("/api/tg-login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ initData }),
+      })
+        .then((res) => res.json().then((d) => ({ ok: res.ok, d })))
+        .then(({ ok: okRes, d }) => {
+          if (!okRes) throw new Error(d.error || "xato");
+          localStorage.setItem("neura_token", d.token);
+          cacheUser({ username: d.user.name || "tg_user", name: d.user.name || "Telegram foydalanuvchisi" });
+          ok.textContent = "Telegram orqali kirdingiz!";
+          ok.style.display = "block";
+          setTimeout(() => { location.href = "/"; }, 400);
+        })
+        .catch((e) => {
+          err.textContent = e.message || "Xatolik yuz berdi.";
+          err.style.display = "block";
+          tgBtn.disabled = false;
+          tgBtn.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M11.94 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm4.8 6.9-1.6 7.6c-.12.55-.44.68-.9.42l-2.47-1.82-1.19 1.15c-.13.13-.25.25-.5.25l.18-2.53 4.6-4.16c.2-.18-.04-.28-.31-.1l-5.69 3.58-2.45-.77c-.53-.17-.54-.53.11-.78l9.56-3.69c.44-.16.83.1.69.85z"/></svg> Telegram orqali tez kirish';
+        });
+    }
+
+    tgBtn.onclick = () => {
+      if (window.Telegram && window.Telegram.WebApp) {
+        const w = window.Telegram.WebApp;
+        if (w.initData) { tgLoginWithInitData(w.initData); return; }
+      }
+      err.textContent = "Bu tugma Telegram ilovasi ichida ishlaydi. Bot orqali oching: @InomjonAI_UzBot";
+      err.style.display = "block";
+    };
 
     function cacheUser(u) {
       try { localStorage.setItem("neura_user", JSON.stringify(u)); } catch (e) {}

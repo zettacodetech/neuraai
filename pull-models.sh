@@ -37,6 +37,13 @@ for model in "${MODELS[@]}"; do
     ollama pull "$model"
 done
 
+# Asosiy modelni xotiraga yuklash (warm-up) — Railway proxy 120s limitiga tushmaslik uchun
+# OLLAMA_KEEP_ALIVE=-1 bo'lsa model doim xotirada qoladi va javob tez bo'ladi
+if [ -n "$WARMUP_MODEL" ]; then
+    echo "Warm-up: $WARMUP_MODEL yuklanmoqda..."
+    ollama run "$WARMUP_MODEL" "Salom! Qisqa javob ber." || echo "Warm-up muvaffaqiyatsiz (e'tiborsiz)"
+fi
+
 echo "=== Barcha modellar yuklandi ==="
 ollama list
 

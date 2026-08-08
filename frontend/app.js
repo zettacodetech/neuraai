@@ -24,6 +24,10 @@ const keyBtn = document.getElementById("apiKeyBtn");
 const themeBtn = document.getElementById("themeBtn");
 const micBtn = document.getElementById("micBtn");
 const loginTopBtn = document.getElementById("loginTopBtn");
+const docInput = document.getElementById("docInput");
+const searchBtn = document.getElementById("searchBtn");
+const galleryBtn = document.getElementById("galleryBtn");
+const shareBtn = document.getElementById("shareBtn");
 
 /* ================= holat ================= */
 
@@ -74,7 +78,29 @@ function fmtDate(iso) {
 const MODEL_LABELS = {
   fast: "⚡ Tez model · gemini-flash-latest",
   think: "🧠 Aqlli model · command-a-plus-05-2026",
+  local: "🖥️ Lokal model · Ollama",
 };
+
+let localAI = null; // {available, model, models} | null
+async function loadLocalAI() {
+  try {
+    const res = await fetch("/api/local-ai");
+    if (!res.ok) return;
+    localAI = await res.json();
+    const btn = document.getElementById("localModelBtn");
+    if (btn) {
+      if (localAI.ok) {
+        btn.classList.add("ok");
+        btn.title = "Lokal AI ishlayapti: " + (localAI.configured_model || "");
+      } else {
+        btn.classList.add("off");
+        btn.title = localAI.hint || "Lokal AI mavjud emas";
+      }
+    }
+  } catch (e) {
+    /* ign */
+  }
+}
 
 /* ================= API ================= */
 
@@ -539,7 +565,10 @@ async function send(text) {
               if (document.hidden) ding();
               if (evt.message_id) addFeedback(ai.row, evt.message_id);
             }
-            if (sseConv !== null) currentConv = sseConv;
+            if (sseConv !== null) {
+              currentConv = sseConv;
+              lastConvId = sseConv;
+            }
             finished = true;
           }
         }
@@ -567,6 +596,7 @@ async function send(text) {
       }
       if (currentConv === null && data.conversation_id) {
         currentConv = data.conversation_id;
+        lastConvId = data.conversation_id;
       }
       refreshConversations();
       updateStats();
@@ -629,6 +659,91 @@ async function sendImage(file) {
   sending = false;
   sendBtn.disabled = false;
   input.focus();
+}
+
+/* ================= hujjat yuklash (PDF/DOCX/TXT) ================= */
+
+async function sendDoc(file) {
+  if (!file || sending) return;
+  if (!me) { openAuth(); return; }
+  sending = true;
+  sendBtn.disabled = true;
+  hideChips();
+  qMessage("user", "📄 " + file.name);
+  const typing = typingRow();
+
+  let text = "";
+  try {
+    const fd = new FormData();
+    fd.append("file", file);
+    const res = await fetch("/api/upload-doc", { method: "POST", body: fd });
+    const data = await res.json();
+    if (!res.ok) throw Object.assign(new Error(data.error || "xato"), { status: res.status });
+    text = "📄 Hujjat: " + data.filename + "\n\n" + data.text;
+  } catch (e) {
+    typing.remove();
+    qMessage("ai", "⚠️ Hujjatni o'qib bo'lmadi: " + (e.message || "qayta urinib ko'ring"));
+    sending = false;
+    sendBtn.disabled = false;
+    return;
+  }
+  typing.remove();
+  send(text);
+  sending = false;
+  sendBtn.disabled = false;
+}
+
+docInput.addEventListener("change", () => {
+  const f = docInput.files[0];
+  if (f) sendDoc(f);
+  docInput.value = "";
+});
+
+/* ================= ovozli xabar (MediaRecorder → /api/stt) ================= */
+
+let recorder = null;
+let recChunks = [];
+
+async function sttSend(blob) {
+  const typing = typingRow();
+  qMessage("user", "🎤 (ovozli xabar)");
+  try {
+    const fd = new FormData();
+    fd.append("file", new File([blob], "voice.webm", { type: "audio/webm" }));
+    const res = await fetch("/api/stt", { method: "POST", body: fd });
+    const data = await res.json();
+    typing.remove();
+    if (!res.ok) throw Object.assign(new Error(data.error || "xato"), { status: res.status });
+    send(data.text);
+  } catch (e) {
+    typing.remove();
+    qMessage("ai", "⚠️ Ovozni tanib bo'lmadi: " + (e.message || "qayta urinib ko'ring"));
+  }
+}
+
+async function startRecorder() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+      ? "audio/webm;codecs=opus"
+      : "audio/webm";
+    recorder = new MediaRecorder(stream, { mimeType: mime });
+    recChunks = [];
+    recorder.ondataavailable = (e) => { if (e.data.size) recChunks.push(e.data); };
+    recorder.onstop = () => {
+      stream.getTracks().forEach((t) => t.stop());
+      const blob = new Blob(recChunks, { type: mime });
+      if (blob.size > 200) sttSend(blob);
+      else { micBtn.classList.remove("rec"); input.placeholder = "InomjonAI ga so'rovingizni yozing..."; }
+    };
+    recorder.start();
+    recognizing = true;
+    micBtn.classList.add("rec");
+    input.placeholder = "Gapiring...";
+    input.value = "🔴 Yozilmoqda...";
+  } catch (e) {
+    alert("Mikrofon ruxsati berilmagan yoki qo'llab-quvvatlanmaydi.");
+  }
 }
 
 /* ================= generatsiya (rasm/video) ================= */
@@ -744,12 +859,38 @@ async function openConversation(id) {
   try {
     const data = await api("/api/conversations/" + id + "?token=" + encodeURIComponent(me.token));
     currentConv = id;
+    lastConvId = id;
     chat.innerHTML = "";
     data.items.forEach((m) => qMessage(m.role === "assistant" ? "ai" : "user", m.text));
     if (!data.items.length) showWelcome();
     refreshConversations();
   } catch (e) {
     if (e.status === 401) openAuth();
+  }
+}
+
+/* ================= ommaviy ulashilgan suhbat (share havolasi) ================= */
+
+async function loadPublicShare(code) {
+  const composer = document.querySelector(".composer");
+  try {
+    const data = await api("/api/share/" + code);
+    renderUser();
+    showChat();
+    const bar = document.createElement("div");
+    bar.className = "share-note";
+    bar.innerHTML =
+      '<span>🔗 <b>' + esc(data.title || "Suhbat") + "</b> — <b>InomjonAI</b> da ulashilgan suhbat</span>" +
+      '<button id="shareJoinBtn">Chatga kirish →</button>';
+    document.querySelector(".main").insertBefore(bar, chat);
+    document.getElementById("shareJoinBtn").onclick = () => { location.href = "/login"; };
+    data.messages.forEach((m) => qMessage(m.role === "assistant" ? "ai" : "user", m.text));
+    if (composer) composer.style.display = "none";
+    if (modelSwitch) modelSwitch.style.display = "none";
+    if (scrollDownBtn) scrollDownBtn.hidden = true;
+    if (shareBtn) shareBtn.style.display = "none";
+  } catch (e) {
+    document.body.innerHTML = '<div style="min-height:100dvh;display:grid;place-items:center;text-align:center;padding:20px"><div><h2 style="margin:0 0 10px">Havola topilmadi yoki o\'chirilgan</h2><a href="/" style="color:var(--violet2)">← Bosh sahifaga qaytish</a></div></div>';
   }
 }
 
@@ -936,6 +1077,19 @@ if (micBtn && SpeechRec) {
     micBtn.classList.remove("rec");
     input.placeholder = "InomjonAI ga so'rovingizni yozing...";
   };
+} else if (micBtn && window.MediaRecorder && navigator.mediaDevices) {
+  micBtn.onclick = () => {
+    if (recognizing) {
+      recognizing = false;
+      micBtn.classList.remove("rec");
+      input.value = "";
+      autoResize();
+      if (recorder && recorder.state !== "inactive") recorder.stop();
+      input.placeholder = "InomjonAI ga so'rovingizni yozing...";
+      return;
+    }
+    startRecorder();
+  };
 } else if (micBtn) {
   micBtn.hidden = true;
 }
@@ -1028,6 +1182,188 @@ function exportConversation(id) {
   }).catch(() => {});
 }
 
+/* ================= ulashish / qidiruv / galereya ================= */
+
+function openModal(id) {
+  const m = document.getElementById(id);
+  if (m) m.hidden = false;
+}
+function closeModal(id) {
+  const m = document.getElementById(id);
+  if (m) m.hidden = true;
+}
+document.querySelectorAll("[data-close]").forEach((b) => {
+  b.onclick = () => closeModal(b.dataset.close);
+});
+
+async function createShare() {
+  if (!me) { openAuth(); return; }
+  const convId = currentConv || lastConvId;
+  if (!convId) {
+    alert("Avval suhbatni boshlang — ulashish uchun kamida bitta xabar kerak.");
+    return;
+  }
+  try {
+    const data = await api("/api/share/create", {
+      method: "POST",
+      body: JSON.stringify({ token: me.token, conversation_id: convId }),
+    });
+    const full = (data.public_url && data.public_url.startsWith("http"))
+      ? data.public_url
+      : location.origin + data.url;
+    const urlEl = document.getElementById("shareUrl");
+    const delBtn = document.getElementById("shareDelBtn");
+    urlEl.value = full;
+    delBtn.style.display = "block";
+    delBtn.onclick = async () => {
+      try {
+        await api("/api/share/delete", {
+          method: "POST",
+          body: JSON.stringify({ token: me.token, conversation_id: convId }),
+        });
+        closeModal("shareModal");
+        alert("Ulashish o'chirildi.");
+      } catch (e) { alert(e.message); }
+    };
+    openModal("shareModal");
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
+const shareCopyBtn = document.getElementById("shareCopyBtn");
+if (shareCopyBtn) {
+  shareCopyBtn.onclick = async () => {
+    const url = document.getElementById("shareUrl").value;
+    if (!url || !navigator.clipboard) return;
+    await navigator.clipboard.writeText(url);
+    shareCopyBtn.textContent = "✓ Nusxalandi";
+    setTimeout(() => { shareCopyBtn.textContent = "Nusxalash"; }, 1500);
+  };
+}
+const shareTgBtn = document.getElementById("shareTgBtn");
+if (shareTgBtn) {
+  shareTgBtn.onclick = () => {
+    const url = document.getElementById("shareUrl").value;
+    if (!url) return;
+    const msg = "🎉 InomjonAI da qiziqarli suhbat! Bu yerdan ko'ring: " + url;
+    window.open("https://t.me/share/url?url=" + encodeURIComponent(url) + "&text=" + encodeURIComponent(msg), "_blank", "noopener");
+  };
+}
+if (shareBtn) shareBtn.onclick = createShare;
+
+/* ---------- qidiruv ---------- */
+
+let searchTimer = null;
+const searchInput = document.getElementById("searchInput");
+
+async function runSearch(q) {
+  const box = document.getElementById("searchResults");
+  q = (q || "").trim();
+  if (q.length < 2) {
+    box.innerHTML = '<div class="search-empty">Kamida 2 ta belgi yozing</div>';
+    return;
+  }
+  if (!me) { openAuth(); return; }
+  try {
+    const data = await api("/api/search?q=" + encodeURIComponent(q) + "&token=" + encodeURIComponent(me.token));
+    if (!data.results.length) {
+      box.innerHTML = '<div class="search-empty">Natija topilmadi</div>';
+      return;
+    }
+    box.innerHTML = "";
+    data.results.forEach((m) => {
+      const row = document.createElement("button");
+      row.className = "search-item";
+      row.innerHTML =
+        '<span class="search-ico">' + (m.role === "assistant" ? "✦" : "👤") + "</span>" +
+        '<span class="search-body"><span class="search-title">' + esc(m.conversation_title || "Suhbat") + "</span>" +
+        '<span class="search-text">' + esc(String(m.text).slice(0, 120)) + "</span></span>" +
+        '<span class="search-date">' + fmtDate(m.created_at) + "</span>";
+      row.onclick = () => {
+        closeModal("searchModal");
+        openConversation(m.conversation_id);
+      };
+      box.appendChild(row);
+    });
+  } catch (e) {
+    box.innerHTML = '<div class="search-empty">' + esc(e.message) + "</div>";
+  }
+}
+
+if (searchInput) {
+  searchInput.addEventListener("input", () => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => runSearch(searchInput.value), 350);
+  });
+  searchInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") runSearch(searchInput.value);
+  });
+}
+if (searchBtn) {
+  searchBtn.onclick = () => {
+    if (!me) { openAuth(); return; }
+    openModal("searchModal");
+    setTimeout(() => { searchInput && searchInput.focus(); }, 100);
+    runSearch(searchInput && searchInput.value);
+  };
+}
+
+/* ---------- galereya ---------- */
+
+let galleryKind = "";
+
+async function loadGallery(kind) {
+  const grid = document.getElementById("galleryGrid");
+  if (!me) return;
+  galleryKind = kind || "";
+  grid.innerHTML = '<div class="search-empty">Yuklanmoqda...</div>';
+  try {
+    const data = await api("/api/gallery?kind=" + encodeURIComponent(galleryKind) + "&token=" + encodeURIComponent(me.token));
+    if (!data.items.length) {
+      grid.innerHTML = '<div class="search-empty">Hali media yo\'q. Chatda 🎨 Rasm yoki 🎬 Video yaratib ko\'ring!</div>';
+      return;
+    }
+    grid.innerHTML = "";
+    data.items.forEach((it) => {
+      const card = document.createElement("div");
+      card.className = "g-item";
+      const cap = esc(it.prompt ? String(it.prompt).slice(0, 60) : it.kind);
+      if (it.kind === "video") {
+        card.innerHTML = '<video src="' + esc(it.url) + '" muted loop preload="metadata"></video><span class="g-cap">' + cap + "</span>";
+        card.onclick = () => { card.querySelector("video").paused ? card.querySelector("video").play() : card.querySelector("video").pause(); };
+      } else if (it.kind === "image") {
+        card.innerHTML = '<img src="' + esc(it.url) + '" alt="' + cap + '" loading="lazy" /><span class="g-cap">' + cap + "</span>";
+        card.onclick = () => window.open(it.url, "_blank", "noopener");
+      } else {
+        card.innerHTML = '<audio controls preload="none" src="' + esc(it.url) + '"></audio><span class="g-cap">' + cap + "</span>";
+      }
+      grid.appendChild(card);
+    });
+  } catch (e) {
+    grid.innerHTML = '<div class="search-empty">' + esc(e.message) + "</div>";
+  }
+}
+
+if (galleryBtn) {
+  galleryBtn.onclick = () => {
+    if (!me) { openAuth(); return; }
+    openModal("galleryModal");
+    loadGallery("");
+  };
+}
+const galleryTabs = document.getElementById("galleryTabs");
+if (galleryTabs) {
+  galleryTabs.onclick = (e) => {
+    const tab = e.target.closest(".tab");
+    if (!tab) return;
+    galleryTabs.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t === tab));
+    loadGallery(tab.dataset.kind);
+  };
+}
+
+let lastConvId = null;
+
 /* ================= bildirishnoma ovozi ================= */
 
 let audioCtx = null;
@@ -1056,6 +1392,13 @@ if ("speechSynthesis" in window) {
 }
 
 async function boot() {
+  loadLocalAI();
+  const shareMatch = location.pathname.match(/^\/share\/([A-Za-z0-9_-]+)/);
+  if (shareMatch) {
+    loadPublicShare(shareMatch[1]);
+    return;
+  }
+
   const token = localStorage.getItem("neura_token");
   const cachedUser = loadCachedUser();
 

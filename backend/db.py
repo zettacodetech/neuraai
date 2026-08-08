@@ -72,6 +72,23 @@ CREATE TABLE IF NOT EXISTS api_keys (
     models     TEXT,
     created_at TEXT DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS shares (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    conversation_id INTEGER NOT NULL,
+    user_id    INTEGER NOT NULL,
+    code       TEXT NOT NULL UNIQUE,
+    created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS gen_history (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    INTEGER NOT NULL,
+    kind       TEXT NOT NULL,
+    url        TEXT NOT NULL,
+    prompt     TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+);
 """
 
 _PG_DDL = [
@@ -137,6 +154,25 @@ _PG_DDL = [
         key        TEXT NOT NULL UNIQUE,
         name       TEXT,
         models     TEXT,
+        created_at TIMESTAMPTZ DEFAULT now()
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS shares (
+        id         BIGSERIAL PRIMARY KEY,
+        conversation_id BIGINT NOT NULL,
+        user_id    BIGINT NOT NULL,
+        code       TEXT NOT NULL UNIQUE,
+        created_at TIMESTAMPTZ DEFAULT now()
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS gen_history (
+        id         BIGSERIAL PRIMARY KEY,
+        user_id    BIGINT NOT NULL,
+        kind       TEXT NOT NULL,
+        url        TEXT NOT NULL,
+        prompt     TEXT,
         created_at TIMESTAMPTZ DEFAULT now()
     )
     """,
@@ -318,7 +354,7 @@ class Database:
 
     def get_user_by_token(self, token: str) -> dict | None:
         row = self._row(
-            "SELECT id, username, name, surname, email, phone, token, client_id "
+            "SELECT id, username, name, surname, email, phone, token, client_id, telegram_id "
             "FROM users WHERE token = ?",
             (token,),
         )
@@ -387,6 +423,42 @@ class Database:
     def set_token(self, user_id: int, token: str) -> None:
         with self._lock:
             self._execute("UPDATE users SET token = ? WHERE id = ?", (token, user_id))
+
+    def set_user_token(self, user_id: int, token: str) -> None:
+        self.set_token(user_id, token)
+
+    # ================= Telegram WebApp =================
+    def get_user_by_telegram(self, telegram_id: str) -> dict | None:
+        row = self._row(
+            "SELECT id, username, name, token, telegram_id FROM users "
+            "WHERE telegram_id = ?",
+            (int(telegram_id) if str(telegram_id).isdigit() else telegram_id,),
+        )
+        return dict(row) if row else None
+
+    def create_telegram_user(
+        self, telegram_id: str, username: str, name: str = "", photo_url: str = ""
+    ) -> dict:
+        tid = int(telegram_id) if str(telegram_id).isdigit() else telegram_id
+        with self._lock:
+            new_id = self._insert(
+                "INSERT INTO users (telegram_id, username, name) VALUES (?, ?, ?)",
+                (tid, username, name or username),
+            )
+        return dict(self._row("SELECT * FROM users WHERE id = ?", (new_id,)))
+
+    def bind_telegram(self, user_id: int, telegram_id: str) -> None:
+        tid = int(telegram_id) if str(telegram_id).isdigit() else telegram_id
+        with self._lock:
+            self._execute(
+                "UPDATE users SET telegram_id = ? WHERE id = ?", (tid, user_id)
+            )
+
+    def unbind_telegram(self, user_id: int) -> None:
+        with self._lock:
+            self._execute(
+                "UPDATE users SET telegram_id = NULL WHERE id = ?", (user_id,)
+            )
 
     # ================= api keys (bepul, limitle) =================
     def set_api_key(
@@ -561,6 +633,14 @@ class Database:
                 "UPDATE messages SET rating = ? WHERE id = ?", (rating, message_id)
             )
 
+    def get_messages(self, conversation_id: int) -> list:
+        rows = self._rows(
+            "SELECT id, role, text, source, created_at FROM messages "
+            "WHERE conversation_id = ? ORDER BY id",
+            (conversation_id,),
+        )
+        return [dict(r) for r in rows]
+
     def get_rating(self, message_id: int) -> int | None:
         row = self._row("SELECT rating FROM messages WHERE id = ?", (message_id,))
         return row["rating"] if row else None
@@ -635,6 +715,74 @@ class Database:
                 (answer, unanswered_id),
             )
             self.add_knowledge(q["question"], answer, source="learning")
+
+    # ================= ulashish (shares) =================
+    def create_share(self, conversation_id: int, user_id: int, code: str) -> bool:
+        existing = self._row(
+            "SELECT id FROM shares WHERE conversation_id = ?", (conversation_id,)
+        )
+        if existing:
+            return False
+        with self._lock:
+            self._execute(
+                "INSERT INTO shares (conversation_id, user_id, code) VALUES (?, ?, ?)",
+                (conversation_id, user_id, code),
+            )
+        return True
+
+    def get_share(self, code: str) -> dict | None:
+        row = self._row("SELECT * FROM shares WHERE code = ?", (code.strip(),))
+        return dict(row) if row else None
+
+    def list_shares(self, user_id: int) -> list:
+        rows = self._rows(
+            "SELECT * FROM shares WHERE user_id = ? ORDER BY created_at DESC LIMIT 50",
+            (user_id,),
+        )
+        return [dict(r) for r in rows]
+
+    def delete_share(self, conversation_id: int, user_id: int) -> None:
+        with self._lock:
+            self._execute(
+                "DELETE FROM shares WHERE conversation_id = ? AND user_id = ?",
+                (conversation_id, user_id),
+            )
+
+    # ================= qidiruv =================
+    def search_messages(self, user_id: int, q: str, limit: int = 30) -> list:
+        like = f"%{q.strip()}%"
+        rows = self._rows(
+            "SELECT m.id, m.role, m.text, m.created_at, c.id AS conversation_id, c.title "
+            "FROM messages m LEFT JOIN conversations c ON c.id = m.conversation_id "
+            "WHERE m.user_id = ? AND m.text LIKE ? "
+            "ORDER BY m.id DESC LIMIT ?",
+            (user_id, like, limit),
+        )
+        return [dict(r) for r in rows]
+
+    # ================= generatsiya tarixi (galereya) =================
+    def add_gen(
+        self, user_id: int, kind: str, url: str, prompt: str | None = None
+    ) -> None:
+        with self._lock:
+            self._execute(
+                "INSERT INTO gen_history (user_id, kind, url, prompt) VALUES (?, ?, ?, ?)",
+                (user_id, kind, url, prompt),
+            )
+
+    def list_gen(self, user_id: int, kind: str | None = None, limit: int = 60) -> list:
+        if kind:
+            rows = self._rows(
+                "SELECT * FROM gen_history WHERE user_id = ? AND kind = ? "
+                "ORDER BY created_at DESC LIMIT ?",
+                (user_id, kind, limit),
+            )
+        else:
+            rows = self._rows(
+                "SELECT * FROM gen_history WHERE user_id = ? ORDER BY created_at DESC LIMIT ?",
+                (user_id, limit),
+            )
+        return [dict(r) for r in rows]
 
 
 _db_instance: Database | None = None

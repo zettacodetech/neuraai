@@ -277,7 +277,20 @@ $ neura ollama run qwen2.5</code></pre>
           <div class="model-switch" id="modelSwitch" title="Modelni tanlash">
             <button class="ms-btn active" data-model="fast">⚡ Tez</button>
             <button class="ms-btn" data-model="think">🧠 Aqlli</button>
+            <button class="ms-btn" data-model="local" id="localModelBtn" title="Lokal AI (Ollama)">🖥️ Lokal</button>
           </div>
+          <button class="head-btn" id="searchBtn" title="Xabarlardan qidiruv">
+            <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+            <span>Qidiruv</span>
+          </button>
+          <button class="head-btn" id="galleryBtn" title="Galereya — yaratilgan media">
+            <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></svg>
+            <span>Galereya</span>
+          </button>
+          <button class="head-btn" id="shareBtn" title="Suhbatni ulashish">
+            <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/></svg>
+            <span>Ulashish</span>
+          </button>
           <a class="head-btn" href="/apk/neuraai.apk" download id="apkBtn" title="Android APK">
             <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
             <span>APK</span>
@@ -320,6 +333,10 @@ $ neura ollama run qwen2.5</code></pre>
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"></rect><circle cx="9" cy="9" r="2"></circle><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"></path></svg>
             <input type="file" id="fileInput" accept="image/*" hidden>
           </label>
+          <label id="docBtn" class="mic-btn" title="Hujjat yuklash (PDF/DOCX/TXT)" for="docInput">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>
+            <input type="file" id="docInput" accept=".pdf,.docx,.txt" hidden>
+          </label>
           <button id="sendBtn" class="send-btn" title="Yuborish">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M3.4 20.4 20.8 12 3.4 3.6 3 10.2l12 1.8-12 1.8z"/></svg>
           </button>
@@ -328,7 +345,66 @@ $ neura ollama run qwen2.5</code></pre>
     </div>
   </div>
 
-  <!-- ============ modallar olib tashlandi (alohida sahifalar: /profile, /api-key, /about) ============ -->
+  <!-- ============ modallar ============ -->
+
+  <div class="modal-backdrop" id="shareModal" hidden>
+    <div class="modal glass">
+      <button class="modal-close" data-close="shareModal" aria-label="Yopish">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+      <div class="modal-logo">🔗</div>
+      <h2>Suhbatni ulashish</h2>
+      <p class="modal-sub">Havolani yuboring — kirish shartsiz ko'radi.</p>
+      <div class="share-box">
+        <input id="shareUrl" readonly onclick="this.select()" />
+        <button id="shareCopyBtn" title="Nusxalash">Nusxalash</button>
+      </div>
+      <button class="auth-submit" id="shareTgBtn" style="margin-top:12px">
+        🤖 Telegram orqali yuborish
+      </button>
+      <button class="auth-submit ghost-submit" id="shareDelBtn" style="margin-top:8px">
+        Ulashishni o'chirish
+      </button>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="searchModal" hidden>
+    <div class="modal modal-lg glass">
+      <button class="modal-close" data-close="searchModal" aria-label="Yopish">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+      <div class="modal-logo">🔍</div>
+      <h2>Xabarlardan qidiruv</h2>
+      <p class="modal-sub">Suhbatlaringizdagi xabarlar ichidan toping.</p>
+      <div class="field">
+        <input id="searchInput" placeholder="Qidiruv so'zini yozing..." autocomplete="off" />
+      </div>
+      <div class="search-results" id="searchResults">
+        <div class="search-empty">Natija yo'q</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="galleryModal" hidden>
+    <div class="modal modal-lg glass">
+      <button class="modal-close" data-close="galleryModal" aria-label="Yopish">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+      <div class="modal-logo">🖼️</div>
+      <h2>Galereya</h2>
+      <p class="modal-sub">Siz yaratgan rasmlar, videolar, musiqalar va ovozlar.</p>
+      <div class="tabs" id="galleryTabs">
+        <button class="tab active" data-kind="">Barchasi</button>
+        <button class="tab" data-kind="image">Rasm</button>
+        <button class="tab" data-kind="video">Video</button>
+        <button class="tab" data-kind="music">Musiqa</button>
+        <button class="tab" data-kind="voice">Ovoz</button>
+      </div>
+      <div class="gallery-grid" id="galleryGrid">
+        <div class="search-empty">Yuklanmoqda...</div>
+      </div>
+    </div>
+  </div>
 
   <div id="cursorGlow" aria-hidden="true"></div>
 

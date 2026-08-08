@@ -6,6 +6,9 @@ import threading
 import time
 import json
 import urllib.request
+import hashlib
+import hmac
+import secrets
 
 # Railway/uvicorn da backend modullari (auth, brain...) shu papkadan topilsin
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -45,6 +48,8 @@ ADMIN_KEY = os.environ.get("ADMIN_KEY", "admin123")
 
 ROOT = os.path.join(os.path.dirname(__file__), "..")
 FRONTEND = os.path.join(ROOT, "frontend")
+
+PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "").rstrip("/")
 
 # ================= API kalitlari rate-limit (bepul, amortizatsiya) =================
 _API_RATE_LIMIT = int(os.environ.get("API_KEY_LIMIT_PER_MINUTE", "20"))
@@ -222,6 +227,7 @@ app.mount("/static", StaticFiles(directory=FRONTEND), name="static")
 
 class GenRequest(BaseModel):
     prompt: str
+    token: str | None = None
 
 
 GEN_DIR = os.environ.get("GEN_OUT_DIR", os.path.join(ROOT, "data", "gen"))
@@ -238,7 +244,20 @@ def gen_image(req: GenRequest) -> JSONResponse:
     if len(req.prompt.strip()) < 2:
         return JSONResponse({"error": "prompt kamida 2 belgi"}, status_code=400)
     path = generate_image(req.prompt.strip())
+    _record_gen(req, "image", _gen_url(path))
     return JSONResponse({"url": _gen_url(path), "prompt": req.prompt.strip()})
+
+
+def _record_gen(req, kind: str, url: str) -> None:
+    token = getattr(req, "token", None)
+    if not token:
+        return
+    try:
+        user = get_db().get_user_by_token(token)
+        if user:
+            get_db().add_gen(user["id"], kind, url, req.prompt.strip())
+    except Exception:
+        pass
 
 
 # ================= Rasm generatsiya (O'zbekcha prompt + auto tarjima) =================
@@ -247,6 +266,7 @@ def gen_image(req: GenRequest) -> JSONResponse:
 class GenerateImageRequest(BaseModel):
     prompt: str  # O'zbekcha: "toglar boglar gullar"
     translate: bool = True  # Avtomatik inglizchaga o'tkazish
+    token: str | None = None
 
 
 @app.post("/api/generate-image")
@@ -279,6 +299,7 @@ def generate_image_endpoint(req: GenerateImageRequest) -> JSONResponse:
             pass  # Tarjima muvaffaqiyatsiz bo'lsa, asl prompt ishlatiladi
 
     path = generate_image(final_prompt)
+    _record_gen(req, "image", _gen_url(path))
     return JSONResponse(
         {
             "url": _gen_url(path),
@@ -293,6 +314,7 @@ def gen_video(req: GenRequest) -> JSONResponse:
     if len(req.prompt.strip()) < 2:
         return JSONResponse({"error": "prompt kamida 2 belgi"}, status_code=400)
     path = generate_video(req.prompt.strip())
+    _record_gen(req, "video", _gen_url(path))
     return JSONResponse({"url": _gen_url(path), "prompt": req.prompt.strip()})
 
 
@@ -893,6 +915,415 @@ async def vision_analyze_ollama(req: VisionRequest) -> JSONResponse:
         return JSONResponse({"error": f"Vision xato: {e}"}, status_code=500)
 
 
+# ================= Hujjat yuklash (PDF/DOCX/TXT) =================
+
+
+@app.post("/api/upload-doc")
+async def upload_doc(file: UploadFile = File(...)) -> JSONResponse:
+    """Hujjatdan matn ajratib oladi, keyin foydalanuvchi chatga yuboradi."""
+    try:
+        raw = await file.read()
+        name = file.filename or "hujjat"
+        ext = name.rsplit(".", 1)[-1].lower() if "." in name else "txt"
+        text = ""
+
+        if ext == "pdf":
+            import io
+
+            import pypdf
+
+            reader = pypdf.PdfReader(io.BytesIO(raw))
+            pages = [p.extract_text() or "" for p in reader.pages]
+            text = "\n\n".join(pages)
+        elif ext == "docx":
+            import io
+
+            import docx as docxlib
+
+            doc = docxlib.Document(io.BytesIO(raw))
+            text = "\n".join(p.text for p in doc.paragraphs)
+        else:
+            for enc in ("utf-8", "windows-1251", "utf-16"):
+                try:
+                    text = raw.decode(enc)
+                    break
+                except (UnicodeDecodeError, LookupError):
+                    continue
+
+        text = text.strip()
+        if not text:
+            return JSONResponse(
+                {
+                    "error": "Hujjatdan matn ajratib bo'lmadi (skanerlangan PDF bo'lishi mumkin)"
+                },
+                status_code=400,
+            )
+        if len(text) > 4000:
+            text = text[:4000] + "\n\n... (hujjat uzun, davomi kesildi)"
+
+        return JSONResponse(
+            {
+                "success": True,
+                "filename": name,
+                "chars": len(text),
+                "text": text,
+                "preview": text[:200],
+            }
+        )
+    except Exception as e:
+        return JSONResponse({"error": f"Hujjatni o'qishda xato: {e}"}, status_code=400)
+
+
+# ================= Ovozli xabar (Speech-to-Text, Groq Whisper) =================
+
+
+def groq_stt(audio_bytes: bytes, filename: str) -> str:
+    import json
+    import urllib.request
+
+    key = os.environ.get("GROQ_API_KEY")
+    if not key:
+        raise RuntimeError("GROQ_API_KEY topilmadi")
+    boundary = "----aiuz" + secrets.token_hex(8)
+    parts = []
+    parts.append(f"--{boundary}\r\n".encode())
+    parts.append(
+        f'Content-Disposition: form-data; name="file"; filename="{filename}"\r\n'.encode()
+    )
+    parts.append(b"Content-Type: audio/mpeg\r\n\r\n")
+    parts.append(audio_bytes)
+    parts.append(b"\r\n")
+    parts.append(f"--{boundary}\r\n".encode())
+    parts.append(b'Content-Disposition: form-data; name="model"\r\n\r\n')
+    parts.append(b"whisper-large-v3-turbo\r\n")
+    parts.append(b"--" + boundary.encode() + b"--\r\n")
+
+    req = urllib.request.Request(
+        "https://api.groq.com/openai/v1/audio/transcriptions",
+        data=b"".join(parts),
+        headers={
+            "Authorization": f"Bearer {key}",
+            "Content-Type": f"multipart/form-data; boundary={boundary}",
+        },
+    )
+    with urllib.request.urlopen(req, timeout=120) as resp:
+        data = json.loads(resp.read().decode())
+    return (data.get("text") or "").strip()
+
+
+@app.post("/api/stt")
+async def stt(file: UploadFile = File(...)) -> JSONResponse:
+    tmp_path = tempfile.mktemp(suffix=".audio")
+    try:
+        audio = await file.read()
+        with open(tmp_path, "wb") as f:
+            f.write(audio)
+        text = groq_stt(audio, file.filename or "voice.mp3")
+    except Exception as e:
+        return JSONResponse({"error": f"Ovozni tanib bo'lmadi: {e}"}, status_code=400)
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+    if not text:
+        return JSONResponse({"error": "Nutq tanilmadi"}, status_code=400)
+    return JSONResponse({"success": True, "text": text})
+
+
+# ================= Lokal AI (Ollama) =================
+
+
+def _ollama_provider():
+    try:
+        import llm as llm_mod
+
+        for p in llm_mod.LLM_PROVIDERS:
+            if isinstance(p, llm_mod._OllamaProvider):
+                return p
+    except Exception:
+        pass
+    return None
+
+
+@app.get("/api/local-ai")
+def local_ai_status() -> JSONResponse:
+    """Lokal AI holati: Ollama ishlayaptimi, qaysi modellar bor."""
+    prov = _ollama_provider()
+    if not prov:
+        return JSONResponse({"success": False, "error": "Ollama sozlanmagan"})
+    models = prov.installed_models()
+    configured = prov.model
+    return JSONResponse(
+        {
+            "success": True,
+            "available": prov.available,
+            "base_url": prov.base_url,
+            "configured_model": configured,
+            "configured_installed": prov.model_installed(configured),
+            "models": models,
+            "provider_order": [
+                os.environ.get("NEURA_LLM_PROVIDER", "auto"),
+            ],
+            "hint": "Yangi model: POST /api/local-ai/pull (admin)",
+        }
+    )
+
+
+class LocalAiPullRequest(BaseModel):
+    admin_key: str = ""
+    model: str = ""
+
+
+@app.post("/api/local-ai/pull")
+def local_ai_pull(req: LocalAiPullRequest) -> JSONResponse:
+    """Model yuklab olish (admin). Yangi model fon'da yuklanadi."""
+    if req.admin_key != ADMIN_KEY:
+        return JSONResponse({"error": "admin kaliti kerak"}, status_code=401)
+    prov = _ollama_provider()
+    if not prov:
+        return JSONResponse({"error": "Ollama sozlanmagan"}, status_code=503)
+    name = (req.model or "").strip()
+    if not name:
+        name = prov.model
+    if prov.model_installed(name):
+        return JSONResponse({"success": True, "model": name, "already": True})
+    threading.Thread(target=prov.pull_model, args=(name,), daemon=True).start()
+    return JSONResponse(
+        {
+            "success": True,
+            "model": name,
+            "status": "downloading",
+            "hint": "Holatni tekshirish: GET /api/local-ai",
+        }
+    )
+
+
+# ================= Ulashish (share) =================
+
+
+@app.post("/api/share/create")
+async def share_create(req: Request) -> JSONResponse:
+    db = get_db()
+    body = await req.json()
+    token = (body.get("token") or "").strip()
+    conversation_id = int(body.get("conversation_id") or 0)
+    user = db.get_user_by_token(token) if token else None
+    if not user:
+        return JSONResponse({"error": "Avval tizimga kiring"}, status_code=401)
+    if not conversation_id:
+        return JSONResponse({"error": "Suhbat topilmadi"}, status_code=400)
+    existing = db.list_shares(user["id"])
+    if any(s["conversation_id"] == conversation_id for s in existing):
+        code = next(
+            s["code"] for s in existing if s["conversation_id"] == conversation_id
+        )
+        return JSONResponse(
+            {
+                "success": True,
+                "code": code,
+                "url": f"/share/{code}",
+                "public_url": f"{PUBLIC_BASE_URL}/share/{code}",
+                "created": True,
+            }
+        )
+    code = secrets.token_urlsafe(8)
+    ok = db.create_share(conversation_id, user["id"], code)
+    if not ok:
+        return JSONResponse({"error": "Suhbat topilmadi"}, status_code=404)
+    return JSONResponse(
+        {
+            "success": True,
+            "code": code,
+            "url": f"/share/{code}",
+            "public_url": f"{PUBLIC_BASE_URL}/share/{code}",
+            "created": True,
+        }
+    )
+
+
+@app.post("/api/share/delete")
+async def share_delete(req: Request) -> JSONResponse:
+    db = get_db()
+    body = await req.json()
+    token = (body.get("token") or "").strip()
+    conversation_id = int(body.get("conversation_id") or 0)
+    user = db.get_user_by_token(token) if token else None
+    if not user:
+        return JSONResponse({"error": "Avval tizimga kiring"}, status_code=401)
+    db.delete_share(conversation_id, user["id"])
+    return JSONResponse({"success": True})
+
+
+@app.get("/api/share/{code}")
+async def share_get(code: str) -> JSONResponse:
+    """Ommaviy — login talab qilinmaydi."""
+    db = get_db()
+    share = db.get_share(code)
+    if not share:
+        return JSONResponse({"error": "Havola topilmadi"}, status_code=404)
+    msgs = db.get_messages(share["conversation_id"])
+    conv = db.get_conversation(share["conversation_id"])
+    return JSONResponse(
+        {
+            "code": code,
+            "title": (conv or {}).get("title", "Suhbat"),
+            "messages": [m for m in msgs if m["role"] in ("user", "assistant")],
+            "created_at": share["created_at"],
+        }
+    )
+
+
+@app.get("/share/{code}")
+async def share_page(code: str) -> FileResponse:
+    db = get_db()
+    share = db.get_share(code)
+    if not share:
+        return JSONResponse({"error": "Havola topilmadi"}, status_code=404)
+    return FileResponse(os.path.join(FRONTEND, "index.html"))
+
+
+@app.get("/share")
+async def share_redirect() -> FileResponse:
+    return FileResponse(os.path.join(FRONTEND, "index.html"))
+
+
+# ================= Qidiruv =================
+
+
+@app.get("/api/search")
+async def search(q: str = "", token: str = "") -> JSONResponse:
+    db = get_db()
+    user = db.get_user_by_token(token) if token else None
+    if not user:
+        return JSONResponse({"error": "Avval tizimga kiring"}, status_code=401)
+    q = q.strip()
+    if len(q) < 2:
+        return JSONResponse({"error": "Qidiruv so'zi juda qisqa"}, status_code=400)
+    results = db.search_messages(user["id"], q)
+    return JSONResponse({"success": True, "results": results})
+
+
+# ================= Galereya (generatsiya tarixi) =================
+
+
+@app.get("/api/gallery")
+async def gallery(kind: str = "", token: str = "") -> JSONResponse:
+    db = get_db()
+    user = db.get_user_by_token(token) if token else None
+    if not user:
+        return JSONResponse({"error": "Avval tizimga kiring"}, status_code=401)
+    items = db.list_gen(user["id"], kind or None)
+    return JSONResponse({"success": True, "items": items})
+
+
+@app.get("/gallery")
+async def gallery_page() -> FileResponse:
+    return FileResponse(os.path.join(FRONTEND, "index.html"))
+
+
+# ================= Telegram WebApp login =================
+
+
+def validate_tg_init_data(init_data: str) -> dict | None:
+    try:
+        from urllib.parse import parse_qsl
+
+        bot_token = os.environ.get("TELEGRAM_BOT_TOKEN")
+        if not bot_token:
+            return None
+        pairs = dict(parse_qsl(init_data, keep_blank_values=True))
+        hash_ = pairs.pop("hash", "")
+        data_check = "\n".join(f"{k}={v}" for k, v in sorted(pairs.items()))
+        secret_key = hashlib.sha256(bot_token.encode()).digest()
+        calc = hmac.new(secret_key, data_check.encode(), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(calc, hash_):
+            return None
+        import json
+
+        return json.loads(pairs["user"])
+    except Exception:
+        return None
+
+
+@app.post("/api/tg-login")
+async def tg_login(req: Request) -> JSONResponse:
+    body = await req.json()
+    init_data = (body.get("initData") or "").strip()
+    if not init_data:
+        return JSONResponse({"error": "initData kerak"}, status_code=400)
+    tg_user = validate_tg_init_data(init_data)
+    if not tg_user:
+        return JSONResponse(
+            {"error": "Telegram ma'lumotlari tasdiqlanmadi"}, status_code=401
+        )
+    tg_id = str(tg_user.get("id"))
+    db = get_db()
+    existing = db.get_user_by_telegram(tg_id)
+    if existing:
+        user = existing
+    else:
+        username = tg_user.get("username") or tg_user.get("first_name") or "tg_user"
+        user = db.create_telegram_user(
+            tg_id,
+            username,
+            tg_user.get("first_name") or "",
+            tg_user.get("photo_url") or "",
+        )
+    token = new_token()
+    db.set_user_token(user["id"], token)
+    return JSONResponse(
+        {
+            "success": True,
+            "token": token,
+            "user": {"name": user["name"], "tg_id": user["tg_id"]},
+        }
+    )
+
+
+@app.post("/api/tg-bind")
+async def tg_bind(req: Request) -> JSONResponse:
+    """Joriy hisobga Telegramni bog'lash (mavjud foydalanuvchi uchun)."""
+    body = await req.json()
+    token = (body.get("token") or "").strip()
+    init_data = (body.get("initData") or "").strip()
+    if not token:
+        return JSONResponse({"error": "Avval tizimga kiring"}, status_code=401)
+    if not init_data:
+        return JSONResponse({"error": "initData kerak"}, status_code=400)
+    db = get_db()
+    user = db.get_user_by_token(token)
+    if not user:
+        return JSONResponse({"error": "Avval tizimga kiring"}, status_code=401)
+    tg_user = validate_tg_init_data(init_data)
+    if not tg_user:
+        return JSONResponse(
+            {"error": "Telegram ma'lumotlari tasdiqlanmadi"}, status_code=401
+        )
+    tg_id = str(tg_user.get("id"))
+    taken = db.get_user_by_telegram(tg_id)
+    if taken and taken["id"] != user["id"]:
+        return JSONResponse(
+            {"error": "Bu Telegram hisob boshqa akkauntga bog'langan"}, status_code=409
+        )
+    db.bind_telegram(user["id"], tg_id)
+    return JSONResponse({"success": True, "tg_id": int(tg_id)})
+
+
+@app.post("/api/tg-unbind")
+async def tg_unbind(req: Request) -> JSONResponse:
+    body = await req.json()
+    token = (body.get("token") or "").strip()
+    if not token:
+        return JSONResponse({"error": "Avval tizimga kiring"}, status_code=401)
+    db = get_db()
+    user = db.get_user_by_token(token)
+    if not user:
+        return JSONResponse({"error": "Avval tizimga kiring"}, status_code=401)
+    db.unbind_telegram(user["id"])
+    return JSONResponse({"success": True})
+
+
 # ================= Musiqa generatsiya (Suno API) =================
 
 
@@ -901,6 +1332,7 @@ class MusicRequest(BaseModel):
     tags: str = "pop, uzbek, energetic"
     title: str = "InomjonAI Track"
     instrumental: bool = False
+    token: str | None = None
 
 
 @app.post("/api/generate-music")
@@ -939,6 +1371,7 @@ async def generate_music(req: MusicRequest) -> JSONResponse:
         path = os.path.join(GEN_DIR, name)
         with open(path, "wb") as f:
             f.write(data)
+        _record_gen(req, "music", _gen_url(path))
         return JSONResponse(
             {
                 "success": True,
@@ -956,6 +1389,7 @@ async def generate_music(req: MusicRequest) -> JSONResponse:
 class VoiceRequest(BaseModel):
     text: str
     voice: str = ""  # af_heart, af_bella, am_onyx, ... (ixtiyoriy)
+    token: str | None = None
 
 
 @app.post("/api/generate-voice")
@@ -976,6 +1410,7 @@ async def generate_voice(req: VoiceRequest) -> JSONResponse:
                 path = os.path.join(GEN_DIR, name)
                 with open(path, "wb") as f:
                     f.write(data)
+                _record_gen(req, "voice", _gen_url(path))
                 return JSONResponse(
                     {
                         "success": True,
@@ -1004,6 +1439,7 @@ async def generate_voice(req: VoiceRequest) -> JSONResponse:
         path = os.path.join(GEN_DIR, name)
         with open(path, "wb") as f:
             f.write(data)
+        _record_gen(req, "voice", _gen_url(path))
         return JSONResponse(
             {"success": True, "audio_url": _gen_url(path), "provider": "pollinations"}
         )
@@ -1188,6 +1624,7 @@ def me(token: str = "") -> JSONResponse:
             "surname": user.get("surname") or "",
             "email": user.get("email") or "",
             "phone": user.get("phone") or "",
+            "telegram_id": user.get("telegram_id") or None,
         }
     )
 
