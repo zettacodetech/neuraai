@@ -1,4 +1,4 @@
-"""Neura CLI — Typer + Rich asosidagi terminal yordamchisi.
+"""InomjonAI CLI — Typer + Rich asosidagi terminal yordamchisi.
 
 Yangi buyruq qo'shish uchun:
     1. Bu papkada yangi modul yarating (masalan: `todo.py`).

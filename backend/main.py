@@ -37,7 +37,7 @@ from llm import OPENROUTER_BASE_URL, llm_chat
 
 _MODELS_CACHE: dict = {"ts": 0.0, "items": []}
 
-app = FastAPI(title="Neura AI")
+app = FastAPI(title="Inomjon AI")
 
 ADMIN_KEY = os.environ.get("ADMIN_KEY", "admin123")
 
@@ -626,7 +626,7 @@ async def vision_analyze_ollama(req: VisionRequest) -> JSONResponse:
 class MusicRequest(BaseModel):
     prompt: str  # Qo'shiq mavzusi/matni
     tags: str = "pop, uzbek, energetic"
-    title: str = "NeuraAI Track"
+    title: str = "InomjonAI Track"
     instrumental: bool = False
 
 
@@ -1079,7 +1079,7 @@ def list_models() -> JSONResponse:
         url,
         headers={
             "Authorization": "Bearer " + api_key,
-            "User-Agent": "NeuraAI/1.1",
+            "User-Agent": "InomjonAI/1.1",
         },
     )
     try:

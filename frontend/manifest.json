@@ -1,6 +1,6 @@
 {
-  "name": "Neura AI — Sun'iy intellekt",
-  "short_name": "Neura AI",
+  "name": "InomjonAI — Sun'iy intellekt",
+  "short_name": "InomjonAI",
   "description": "Noldan qurilgan sun'iy intellekt. Savol bering — javob beradi, internetdan qidiradi va siz bilan o'rganadi.",
   "start_url": "/",
   "scope": "/",
@@ -23,7 +23,7 @@
       "purpose": "any maskable"
     }
   ],
-  "id": "neura-ai",
+  "id": "inomjon-ai",
   "categories": [
     "productivity",
     "utilities"

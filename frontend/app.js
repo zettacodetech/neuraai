@@ -1,4 +1,4 @@
-/* ==================== NeuraAI frontend ==================== */
+/* ==================== InomjonAI frontend ==================== */
 
 const chat = document.getElementById("chat");
 const input = document.getElementById("input");
@@ -317,7 +317,7 @@ function showWelcome() {
   const w = document.createElement("div");
   w.className = "welcome";
   w.innerHTML =
-    "<div class='welcome-logo'>✦</div>" +
+    "<div class='welcome-logo'><img src='/static/icons/logo.png' alt='InomjonAI' /></div>" +
     "<h2>" + greeting() + (name ? ", <span class='grad-text'>" + esc(name) + "</span>!" : "!") + "</h2>" +
     "<p>Men suhbatlashib o'rganadigan sun'iy intellektman. Savol bering, kod yozing, rasm tahlil qiling yoki yangi rasm/video yarating.</p>";
   const grid = w.appendChild(document.createElement("div"));

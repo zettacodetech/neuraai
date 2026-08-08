@@ -400,7 +400,7 @@ def llm_answer(
     if not llm_available():
         return None
     system = (
-        "Siz Neura AI yordamchisiz. O'zbek tilida (lotin yozuvida) sodda, ishonchli "
+        "Siz Inomjon AI yordamchisiz. O'zbek tilida (lotin yozuvida) sodda, ishonchli "
         "va hurmatli javob bering. Javob 3-5 qisqa jumla bo'lsin. Faktni bilmasangiz, "
         "o'ylab topmang — shunchaki bilmasligingizni ayting."
     )

@@ -127,7 +127,7 @@ def generate_image(prompt: str) -> str | None:
     project = _post(
         "/v1/ai-image-generator",
         {
-            "name": "Neura AI image",
+            "name": "InomjonAI image",
             "image_count": 1,
             "model": "default",
             "aspect_ratio": "1:1",
@@ -152,7 +152,7 @@ def generate_video(prompt: str, end_seconds: int = 5) -> str | None:
     project = _post(
         "/v1/text-to-video",
         {
-            "name": "Neura AI video",
+            "name": "InomjonAI video",
             "end_seconds": end_seconds,
             "model": "default",
             "aspect_ratio": "1:1",

@@ -64,7 +64,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         ]
     )
     await update.message.reply_text(
-        "👋 <b>Neura AI</b> — o'zbek tilidagi sun'iy intellekt yordamchingiz!\n\n"
+        "👋 <b>Inomjon AI</b> — o'zbek tilidagi sun'iy intellekt yordamchingiz!\n\n"
         "🟣 Savol yozing — tabiiy javob beraman\n"
         "💻 <code>kod yoz</code> — dastur kodlayman\n"
         "📷 Rasm yuboring — tahlil qilaman\n"
@@ -266,7 +266,7 @@ def start_bot_in_thread() -> None:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
-            logging.info("Neura AI bot ishga tushdi (thread)")
+            logging.info("Inomjon AI bot ishga tushdi (thread)")
             _build_app().run_polling(stop_signals=None)
         except Exception as exc:
             logging.error("Bot to'xtadi: %s", exc)
@@ -282,7 +282,7 @@ def start_bot_in_thread() -> None:
 def main() -> None:
     if not TOKEN:
         raise SystemExit("TELEGRAM_BOT_TOKEN muhit o'zgaruvchisi kerak!")
-    logging.info("Neura AI bot ishga tushdi")
+    logging.info("Inomjon AI bot ishga tushdi")
     _build_app().run_polling()
 
 

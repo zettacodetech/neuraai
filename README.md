@@ -1,4 +1,4 @@
-# Neura AI — noldan qurilgan sun'iy intellekt
+# Inomjon AI — noldan qurilgan sun'iy intellekt
 
 Noldan qurilgan sun'iy intellekt: sayt chat + Telegram bot + CLI + PWA ilova.
 Hech qanday tashqi AI, API yoki tayyor model yo'q — hammasi o'z kodimiz.

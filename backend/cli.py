@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Neura AI CLI — terminaldagi aqlli suhbatdosh.
+"""Inomjon AI CLI — terminaldagi aqlli suhbatdosh.
 
 Ishlatish:
     python cli.py "Savolingiz"            # bir martalik savol (⚡ tez model)
@@ -158,7 +158,7 @@ def _stats() -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Neura AI CLI — terminal'dan sun'iy intellekt",
+        description="Inomjon AI CLI — terminal'dan sun'iy intellekt",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""Yuklab olish / o'rnatish:
   git clone https://github.com/zettacodetech/neuraai

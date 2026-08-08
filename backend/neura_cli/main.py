@@ -1,4 +1,4 @@
-"""Neura CLI — Typer + Rich asosidagi terminal yordamchisi.
+"""InomjonAI CLI — Typer + Rich asosidagi terminal yordamchisi.
 
 Komaqalar to'g'ridan `cli`'ga ulangan, lekin har biri alohida modulda
 yashaydi (`commands/chat.py`, `commands/fix.py`). Yangi buyruq qo'shish:
@@ -31,7 +31,7 @@ def _exitcode(fn):
 
 cli = typer.Typer(
     name="neura",
-    help="Neura AI — terminaldagi aqlli suhbatdosh va kod yordamchisi.",
+    help="Inomjon AI — terminaldagi aqlli suhbatdosh va kod yordamchisi.",
     no_args_is_help=True,
 )
 

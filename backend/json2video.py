@@ -68,7 +68,7 @@ def generate_video(prompt: str) -> str | None:
         return None
     try:
         lines = _clean_lines(prompt)
-        title = lines[0] if lines else "Neura AI"
+        title = lines[0] if lines else "Inomjon AI"
         body = lines[1:] if len(lines) > 1 else []
         title_el = {
             "type": "text",
