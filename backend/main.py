@@ -709,7 +709,7 @@ def _chat_stream_events(req: "ChatRequest", ctx: dict) -> Iterable[str]:
                     context = web_ctx
             except Exception:
                 context = None
-        from llm import llm_answer_stream
+        from llm import _clean, llm_answer_stream
 
         got_any = False
         parts: list[str] = []
@@ -723,7 +723,7 @@ def _chat_stream_events(req: "ChatRequest", ctx: dict) -> Iterable[str]:
         except Exception:
             got_any = False
         if got_any:
-            reply = "".join(parts).strip() or None
+            reply = _clean("".join(parts).strip()) or None
             source = "websearch" if context else "llm"
 
     reply = reply or (

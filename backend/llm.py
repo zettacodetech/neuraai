@@ -366,7 +366,7 @@ def _clean(text: str) -> str:
     if not text:
         return text
     text = re.sub(
-        r"^\s*[*\-–—•]?\s*(Tone|Verbosity|Format|Sentence count|Length|Output format|Additional instructions)\s*:.*$",
+        r"^\s*[*\-–—•]?\s*(Tone|Verbosity|Format|Sentence count|Length|Output format|Additional instructions|Persona|Constraints|Priorities|Role|Respond in|Do not|Keep in|Your ?(task|goal)|Hallucination|Structure)\s*:.*$",
         "",
         text,
         flags=re.M | re.I,
