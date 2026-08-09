@@ -505,11 +505,14 @@ def _build_providers() -> list:
     ollama_model = os.environ.get("OLLAMA_MODEL", "llama3.3:8b")
     providers.append(_OllamaProvider(ollama_url, ollama_model))
 
-    # 7b. Ikkinchi Ollama server (masalan, Railway'da 2-xizmat) — OLLAMA_BASE_URL_2
-    ollama2_url = os.environ.get("OLLAMA_BASE_URL_2", "").strip()
-    ollama2_model = os.environ.get("OLLAMA_MODEL_2", "").strip()
-    if ollama2_url:
-        providers.append(_OllamaProvider(ollama2_url, ollama2_model or ollama_model))
+    # 7b. Qo'shimcha Ollama serverlar (klaster) — OLLAMA_BASE_URL_2.._8
+    # Har bir server o'z model ro'yxatiga ega; round-robin yukni taqsimlaydi.
+    for i in range(2, 9):
+        extra_url = os.environ.get(f"OLLAMA_BASE_URL_{i}", "").strip()
+        if not extra_url:
+            continue
+        extra_model = os.environ.get(f"OLLAMA_MODEL_{i}", "").strip()
+        providers.append(_OllamaProvider(extra_url, extra_model or ollama_model))
 
     # 8. Groq
     groq_key = (
@@ -550,6 +553,21 @@ def _build_providers() -> list:
 
 
 LLM_PROVIDERS = _build_providers()
+
+# Klaster round-robin: har so'rovda keyingi Ollama serveridan boshlash
+_ollama_counter = {"index": 0}
+
+
+def _rotate_ollama_chain(chain: list) -> list:
+    """Ollama providerlarini navbatma-navbat boshga qo'yadi (yuk taqsimoti)."""
+    ollamas = [p for p in chain if isinstance(p, _OllamaProvider)]
+    if len(ollamas) < 2:
+        return chain
+    i = _ollama_counter["index"] % len(ollamas)
+    _ollama_counter["index"] += 1
+    rotated = ollamas[i:] + ollamas[:i]
+    rest = [p for p in chain if not isinstance(p, _OllamaProvider)]
+    return rotated + rest
 
 
 def llm_available() -> bool:
@@ -664,8 +682,9 @@ def llm_chat_stream(
     chain = LLM_PROVIDERS
     if model:
         if model.strip().lower() in ("local", "lokal", "offline", "ollama"):
-            # Lokal rejim — faqat Ollama ishlatiladi
+            # Lokal rejim — faqat Ollama ishlatiladi (klaster round-robin)
             chain = sorted(chain, key=lambda p: not isinstance(p, _OllamaProvider))
+            chain = _rotate_ollama_chain(chain)
         else:
             resolved = model.strip().split(":")[-1].lstrip("~/")
             d = model.strip().lstrip("~/")
