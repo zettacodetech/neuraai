@@ -369,6 +369,7 @@ _news_cache: dict = {}
 @app.get("/api/news")
 def news() -> JSONResponse:
     """Kunlik yangiliklar (5 daqiqa cache) — sayt, ilova, CLI uchun."""
+    global _news_cache
     now = time.time()
     if _news_cache and now - _news_cache["ts"] < 300:
         return JSONResponse(_news_cache["data"])
