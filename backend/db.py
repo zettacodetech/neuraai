@@ -882,7 +882,7 @@ class Database:
         self, note_id: int, user_id: int, title: str, content: str, category: str
     ) -> bool:
         self._execute(
-            "UPDATE notes SET title = ?, content = ?, category = ?, updated_at = datetime('now') "
+            "UPDATE notes SET title = ?, content = ?, category = ?, updated_at = CURRENT_TIMESTAMP "
             "WHERE id = ? AND user_id = ?",
             (title, content, category, note_id, user_id),
         )
@@ -907,7 +907,7 @@ class Database:
             row = self._row("SELECT id FROM settings WHERE user_id = ?", (user_id,))
             if row:
                 self._execute(
-                    "UPDATE settings SET lang = ?, theme = ?, updated_at = datetime('now') WHERE user_id = ?",
+                    "UPDATE settings SET lang = ?, theme = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?",
                     (lang, theme, user_id),
                 )
             else:
