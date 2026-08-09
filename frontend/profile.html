@@ -122,6 +122,13 @@
       </div>
       <div id="statsDetail"></div>
 
+      <div class="profile-divider">👑 Premium</div>
+      <div class="field"><b id="premiumStatus">Premium: tekshirilmoqda...</b></div>
+      <a class="tg-bind-btn" id="premiumBtn" href="https://t.me/Inomjonai_bot?start=premium" target="_blank" style="display:flex;align-items:center;justify-content:center;text-decoration:none">
+        <span>⭐ Premium olish — Telegram orqali</span>
+      </a>
+      <p class="hint" style="margin-top:6px">To'lov bitta usulda — Telegram Stars orqali. Premium barcha platformalarda (sayt, ilova, CLI, bot) ishlaydi.</p>
+
       <div class="profile-divider">🤖 Telegram bog'lash</div>
       <div class="tg-bind-status" id="tgBindStatus" hidden></div>
       <button class="tg-bind-btn" id="tgBindBtn">
@@ -228,6 +235,16 @@
         tgLinked = u.telegram_id || null;
         renderTgBind();
         if (u.avatar) document.getElementById("avatarPreview").src = u.avatar;
+        const premiumEl = document.getElementById("premiumStatus");
+        if (premiumEl) {
+          if (u.premium) {
+            const until = (u.premium_until || "").slice(0, 10);
+            premiumEl.innerHTML = "👑 Premium faol" + (until ? " — " + until + " gacha" : "") + " 🎉";
+            document.getElementById("premiumBtn").innerHTML = "<span>⭐ Premiumni uzaytirish</span>";
+          } else {
+            premiumEl.innerHTML = "Premium yoqilmagan";
+          }
+        }
         try {
           const st = await apiFetch("/api/stats?token=" + encodeURIComponent(token));
           document.querySelector("#statsGrid .stat-cell:nth-child(1) b").textContent = st.messages;

@@ -33,10 +33,13 @@ from telegram.ext import (
     CallbackQueryHandler,
     CommandHandler,
     ContextTypes,
+    ConversationHandler,
     MessageHandler,
     PreCheckoutQueryHandler,
     filters,
 )
+
+from auth import hash_password, new_token, verify_password
 
 from brain import brain
 from db import get_db
@@ -52,6 +55,36 @@ current_conv: dict[int, int] = {}
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    # Deep link: t.me/InomjonAI_Bot?start=premium — to'lov oynasini ochadi
+    payload = ""
+    if context.args:
+        payload = context.args[0]
+    if payload.startswith("premium"):
+        # Sayt/ilova/CLI'dan to'lovga kelganda — to'g'ridan rejalar
+        db = get_db()
+        user_id = db.get_or_create_user(telegram_id=update.effective_user.id)
+        until = db.get_premium_until(user_id)
+        kb = InlineKeyboardMarkup(
+            [
+                [InlineKeyboardButton("⭐ 1 oy — 150 ⭐", callback_data="premium:1m")],
+                [InlineKeyboardButton("⭐ 3 oy — 400 ⭐", callback_data="premium:3m")],
+                [
+                    InlineKeyboardButton(
+                        "⭐ 12 oy — 1400 ⭐", callback_data="premium:12m"
+                    )
+                ],
+            ]
+        )
+        await update.message.reply_text(
+            "👑 <b>Inomjon AI Premium</b>\n\n"
+            "⭐ 1 oy — 150 ⭐\n⭐ 3 oy — 400 ⭐\n⭐ 12 oy — 1400 ⭐\n\n"
+            f"Holat: <b>{_premium_text(until)}</b>\n\n"
+            "Rejani tanlang — to'lov Telegram Stars orqali:",
+            parse_mode="HTML",
+            reply_markup=kb,
+        )
+        return
+
     kb = InlineKeyboardMarkup(
         [
             [
@@ -104,6 +137,164 @@ async def new_chat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(
         "✨ Yangi suhbat boshlanmoqda. Savolingizni yozing!"
     )
+
+
+# ================= Ro'yxatdan o'tish / Login (sayt hisobi bilan bog'lash) =================
+# Foydalanuvchi Telegram'da hisob yaratadi yoki mavjud sayt hisobiga kiradi.
+# Shu bilan bir xil premium/to'lov, suhbatlar va API key ishlatiladi.
+REG_USERNAME, REG_PASSWORD, LOGIN_USERNAME, LOGIN_PASSWORD = range(4)
+
+_ME_URL = "https://neuraai.up.railway.app"
+
+
+async def register_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    db = get_db()
+    user_id = db.get_or_create_user(telegram_id=update.effective_user.id)
+    existing = db.get_user(user_id)
+    if existing and existing.get("username") and existing.get("password_hash"):
+        await update.message.reply_text(
+            "📋 <b>Siz allaqachon ro'yxatdan o'tgansiz!</b>\n\n"
+            f"Login: <code>{existing['username']}</code>\n\n"
+            "Agar boshqa hisobga ulashmoqchi bo'lsangiz — <code>/login</code> yozing.\n"
+            "Premium sotib olish — <code>/premium</code>.",
+            parse_mode="HTML",
+        )
+        return ConversationHandler.END
+    await update.message.reply_text(
+        "📝 <b>Ro'yxatdan o'tish</b>\n\n"
+        "Sayt (neuraai.up.railway.app) va barcha qurilmalarda ishlatiladigan "
+        "bir xil hisob yaratiladi.\n\n"
+        "Login (foydalanuvchi nomi) kiriting:\n"
+        "• Harflar, raqamlar, <code>_</code> yoki <code>-</code>\n"
+        "• 3-20 belgi\n\n"
+        "Bekor qilish — <code>/cancel</code>",
+        parse_mode="HTML",
+    )
+    return REG_USERNAME
+
+
+async def reg_username(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    username = (update.message.text or "").strip().lower()
+    if (
+        not (3 <= len(username) <= 20)
+        or not username.replace("_", "").replace("-", "").isalnum()
+    ):
+        await update.message.reply_text(
+            "❌ Login noto'g'ri. Faqat harflar, raqamlar, _ yoki - ishlating (3-20 belgi)."
+        )
+        return REG_USERNAME
+    db = get_db()
+    exists = db.get_user_by_username(username)
+    if exists:
+        await update.message.reply_text(
+            "❌ Bu login band. Boshqa login tanlang yoki mavjud hisobga kirmoqchi bo'lsangiz — <code>/login</code>."
+        )
+        return REG_USERNAME
+    context.user_data["reg_username"] = username
+    await update.message.reply_text(
+        f"✅ Login: <code>{username}</code>\n\nEndi parol kiriting (kamida 4 belgi):",
+        parse_mode="HTML",
+    )
+    return REG_PASSWORD
+
+
+async def reg_password(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    password = (update.message.text or "").strip()
+    if len(password) < 4:
+        await update.message.reply_text(
+            "❌ Parol kamida 4 belgi bo'lishi kerak. Qayta kiriting:"
+        )
+        return REG_PASSWORD
+    username = context.user_data.get("reg_username")
+    db = get_db()
+    user_id = db.get_or_create_user(telegram_id=update.effective_user.id)
+    user = db.get_user(user_id)
+    if user and user.get("username"):
+        await update.message.reply_text(
+            "❌ Hisob allaqachon mavjud. <code>/login</code> dan foydalaning."
+        )
+        return ConversationHandler.END
+    db._execute(
+        "UPDATE users SET username = ?, password_hash = ?, name = ? WHERE id = ?",
+        (
+            username,
+            hash_password(password),
+            update.effective_user.username or username,
+            user_id,
+        ),
+    )
+    token = new_token()
+    db.set_token(user_id, token)
+    await update.message.reply_text(
+        "🎉 <b>Ro'yxatdan o'tish muvaffaqiyatli!</b>\n\n"
+        f"👤 Login: <code>{username}</code>\n"
+        "✅ Endi saytga ham shu login/parol bilan kira olasiz: "
+        "https://neuraai.up.railway.app/login\n\n"
+        "Premium sotib olish — <code>/premium</code>",
+        parse_mode="HTML",
+    )
+    context.user_data.pop("reg_username", None)
+    return ConversationHandler.END
+
+
+async def login_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    await update.message.reply_text(
+        "🔑 <b>Sayt hisobiga kirish</b>\n\n"
+        "Saytda ro'yxatdan o'tgan login (foydalanuvchi nomi) kiriting:\n\n"
+        "Bekor qilish — <code>/cancel</code>",
+        parse_mode="HTML",
+    )
+    return LOGIN_USERNAME
+
+
+async def login_username(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    username = (update.message.text or "").strip().lower()
+    db = get_db()
+    user = db.get_user_by_username(username)
+    if not user or not user.get("password_hash"):
+        await update.message.reply_text(
+            "❌ Bunday hisob topilmadi. Ro'yxatdan o'tish — <code>/register</code>, qayta urinish — <code>/login</code>."
+        )
+        return ConversationHandler.END
+    context.user_data["login_username"] = username
+    await update.message.reply_text(
+        f"✅ Hisob topildi: <code>{username}</code>\n\nParolni kiriting:"
+    )
+    return LOGIN_PASSWORD
+
+
+async def login_password(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    password = (update.message.text or "").strip()
+    username = context.user_data.get("login_username")
+    db = get_db()
+    user = db.get_user_by_username(username)
+    if not user or not verify_password(password, user["password_hash"]):
+        await update.message.reply_text(
+            "❌ Parol noto'g'ri. Qayta urinish — <code>/login</code>."
+        )
+        return ConversationHandler.END
+    # Telegram ID'ni sayt hisobiga bog'lash (bitta to'lov/hisob hammasida)
+    db.bind_telegram(user["id"], update.effective_user.id)
+    token = new_token()
+    db.set_token(user["id"], token)
+    until = db.get_premium_until(user["id"])
+    await update.message.reply_text(
+        "✅ <b>Kirish muvaffaqiyatli!</b>\n\n"
+        f"👤 <code>{username}</code>\n"
+        f"👑 Premium: {_premium_text(until)}\n\n"
+        "Endi sayt, ilova, CLI va bot'da bir xil hisob ishlatiladi.\n"
+        "Premium sotib olish — <code>/premium</code>",
+        parse_mode="HTML",
+    )
+    context.user_data.pop("login_username", None)
+    return ConversationHandler.END
+
+
+async def cancel_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    context.user_data.pop("reg_username", None)
+    context.user_data.pop("login_username", None)
+    await update.message.reply_text("❌ Bekor qilindi.")
+    return ConversationHandler.END
 
 
 # ================= Premium / Telegram Stars to'lov =================
@@ -398,6 +589,34 @@ def _build_app() -> Application:
     app.add_handler(CommandHandler("new", new_chat))
     app.add_handler(CommandHandler("premium", premium_cmd))
     app.add_handler(CommandHandler("pay", premium_cmd))
+    app.add_handler(
+        ConversationHandler(
+            entry_points=[CommandHandler("register", register_cmd)],
+            states={
+                REG_USERNAME: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, reg_username)
+                ],
+                REG_PASSWORD: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, reg_password)
+                ],
+            },
+            fallbacks=[CommandHandler("cancel", cancel_cmd)],
+        )
+    )
+    app.add_handler(
+        ConversationHandler(
+            entry_points=[CommandHandler("login", login_cmd)],
+            states={
+                LOGIN_USERNAME: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, login_username)
+                ],
+                LOGIN_PASSWORD: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, login_password)
+                ],
+            },
+            fallbacks=[CommandHandler("cancel", cancel_cmd)],
+        )
+    )
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_message))
     app.add_handler(MessageHandler(filters.PHOTO, on_photo))
     app.add_handler(CallbackQueryHandler(on_callback))

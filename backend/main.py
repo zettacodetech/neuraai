@@ -1872,6 +1872,8 @@ def me(token: str = "") -> JSONResponse:
             "telegram_id": user.get("telegram_id") or None,
             "referal_code": user.get("referal_code") or "",
             "avatar": user.get("avatar") or "",
+            "premium": db.is_premium(user["id"]),
+            "premium_until": db.get_premium_until(user["id"]) or "",
         }
     )
 
