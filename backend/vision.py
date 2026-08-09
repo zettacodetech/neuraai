@@ -150,3 +150,55 @@ def ocr(path: str, timeout: float = 60.0) -> str:
         except Exception:
             continue
     return ""
+
+
+def describe(path: str, timeout: float = 90.0) -> str:
+    """Rasmdagi barcha narsalarni AI (vision model) bilan batafsil tasvirlaydi.
+
+    Obyektlar, odamlar, hayvonlar, transport, joy, hislatlar va boshqalar.
+    O'zbek tilida javob qaytaradi. Xato bo'lsa — bo'sh qator.
+    """
+    try:
+        with open(path, "rb") as f:
+            b64 = base64.b64encode(f.read()).decode()
+    except Exception:
+        return ""
+
+    model = os.environ.get("OLLAMA_VISION_MODEL", "llama3.2-vision")
+    base_urls = [os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")]
+    for i in range(2, 9):
+        u = os.environ.get(f"OLLAMA_BASE_URL_{i}", "").strip()
+        if u:
+            base_urls.append(u)
+
+    prompt = (
+        "Bu rasmni diqqat bilan ko'rib chiq va undagi BARCHA narsalarni "
+        "o'zbek tilida batafsil tasvirlab ber: qanday obyektlar, odamlar, "
+        "hayvonlar, transport vositalari, joy, ranglar, harakat va xolatlar. "
+        "Agar rasmda matn bo'lsa, uni ham ayt. Aniq, tartibli ro'yxat qilib yoz."
+    )
+    payload = {
+        "model": model,
+        "prompt": prompt,
+        "images": [b64],
+        "stream": False,
+        "options": {"temperature": 0.4},
+    }
+    body = bytes(__import__("json").dumps(payload), "utf-8")
+
+    for base_url in base_urls:
+        try:
+            req = urllib.request.Request(
+                base_url.rstrip("/") + "/api/generate",
+                data=body,
+                method="POST",
+                headers={"Content-Type": "application/json"},
+            )
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                data = __import__("json").loads(r.read().decode())
+            out = str(data.get("response", "")).strip()
+            if out:
+                return out
+        except Exception:
+            continue
+    return ""

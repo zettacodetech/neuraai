@@ -679,15 +679,107 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             query.message.text
             + ("\n\n✅ Rahmat! Bu javob meni o'rgatadi." if parts[2] == "1" else "")
         )
+        return
+
+    # --- Rasm: internetdan topish / tarjima ---
+    if len(parts) == 3 and parts[0] == "img" and parts[1] in ("search", "translate"):
+        action, file_id = parts[1], parts[2]
+        await query.edit_message_text("⏳ Iltimos kuting...")
+        try:
+            file = await context.bot.get_file(file_id)
+            raw = await file.download_as_bytearray()
+            path = tempfile.mktemp(suffix=".jpg")
+            with open(path, "wb") as f:
+                f.write(raw)
+            try:
+                if action == "search":
+                    await _img_web_search(query, path)
+                else:
+                    await _img_translate(query, path)
+            finally:
+                os.unlink(path)
+        except Exception as e:
+            await query.edit_message_text(f"Xatolik yuz berdi: {e}")
+        return
+
+
+async def _img_web_search(query, path: str) -> None:
+    """Rasmdagi narsani internetdan topib beradi (AI tasvirlash + Google qidiruv)."""
+    from vision import describe as vision_describe
+
+    desc = vision_describe(path)
+    if not desc:
+        await query.edit_message_text(
+            "Rasmni tahlil qila olmadim, qidiruv bajarilmadi."
+        )
+        return
+    from websearch import search_answer
+
+    await query.edit_message_text(
+        f"🔍 <b>Internetdan qidirilmoqda...</b>\n\n📝 <b>Rasmda:</b> {desc[:300]}...",
+        parse_mode="HTML",
+    )
+    summary = search_answer(desc[:300])
+    if not summary:
+        await query.edit_message_text(
+            f"🤖 <b>Rasmda nima bor:</b>\n\n{desc[:2000]}\n\n"
+            "❌ Internetdan ma'lumot topilmadi.",
+            parse_mode="HTML",
+        )
+        return
+    await query.edit_message_text(
+        f"🌐 <b>Internetdan topilgan ma'lumot:</b>\n\n{summary[:2500]}",
+        parse_mode="HTML",
+    )
+
+
+async def _img_translate(query, path: str) -> None:
+    """Rasmdagi matnni o'zbek tiliga tarjima qiladi."""
+    from vision import ocr as vision_ocr
+
+    ocr_text = vision_ocr(path)
+    if not ocr_text:
+        await query.edit_message_text("Rasmda matn topilmadi.")
+        return
+    try:
+        from llm import llm_chat
+
+        result = llm_chat(
+            [
+                {
+                    "role": "system",
+                    "content": (
+                        "Sen professional tarjimonsan. Quyidagi matnni o'zbek "
+                        "tiliga tarjima qil. Asl ma'noni saqlab, tabiiy tarjima "
+                        "qil. Faqat tarjima matnini qaytar."
+                    ),
+                },
+                {"role": "user", "content": ocr_text[:2000]},
+            ],
+            fast=True,
+        )
+    except Exception:
+        result = ""
+    if not result or result == ocr_text.strip():
+        result = ocr_text
+    await query.edit_message_text(
+        f"📝 <b>Asl matn:</b>\n{ocr_text[:1000]}\n\n"
+        f"🇺🇿 <b>O'zbekcha tarjima:</b>\n{result[:2000]}",
+        parse_mode="HTML",
+    )
 
 
 async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Faza 4: rasm tahlili — format, ranglar, yorug'lik va boshqa ma'lumotlar."""
+    """Rasm tahlili: format/ranglar + OCR (matn o'qish) + AI tasvirlash + tarjima + qidiruv."""
     file = await update.message.photo[-1].get_file()
+    file_id = file.file_id
     raw = await file.download_as_bytearray()
     path = tempfile.mktemp(suffix=".jpg")
     with open(path, "wb") as f:
         f.write(raw)
+
+    text = ""
+    ocr_text = ""
     try:
         data = analyze_image(path)
         lines = [
@@ -703,21 +795,31 @@ async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if exif.get("DateTimeOriginal"):
             lines.append(f"• Sana: {exif['DateTimeOriginal']}")
         text = "\n".join(lines)
+
+        # OCR: suratdagi matnni o'qish
+        try:
+            from vision import ocr as vision_ocr
+
+            ocr_text = vision_ocr(path)
+            if ocr_text:
+                text += "\n\n📝 <b>Suratdagi matn:</b>\n" + ocr_text[:1500]
+        except Exception:
+            pass
+
+        # AI to'liq tasvirlash: rasmda nima bor
+        try:
+            from vision import describe as vision_describe
+
+            desc = vision_describe(path)
+            if desc:
+                text += "\n\n🤖 <b>AI tasvirlashi:</b>\n" + desc[:2000]
+        except Exception:
+            pass
     except Exception as e:
         await update.message.reply_text(f"Rasmni tahlil qila olmadim: {e}")
         return
     finally:
         os.unlink(path)
-
-    # --- OCR: suratdagi matnni o'qish (Ollama vision model orqali) ---
-    try:
-        from vision import ocr as vision_ocr
-
-        ocr_text = vision_ocr(path)
-        if ocr_text:
-            text += "\n\n📝 <b>Suratdagi matn:</b>\n" + ocr_text[:1500]
-    except Exception:
-        pass
 
     db = get_db()
     user_id = db.get_or_create_user(telegram_id=update.effective_user.id)
@@ -731,7 +833,17 @@ async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     db.add_message(user_id, "user", "📷 Rasm yubordi", conversation_id=conv_id)
     db.add_message(user_id, "assistant", text, source="vision", conversation_id=conv_id)
 
-    await update.message.reply_text(text, parse_mode="HTML")
+    buttons = [
+        InlineKeyboardButton(
+            "🌐 Internetdan topish", callback_data=f"img:search:{file_id}"
+        )
+    ]
+    if ocr_text:
+        buttons.append(
+            InlineKeyboardButton("🔄 Tarjima", callback_data=f"img:translate:{file_id}")
+        )
+    kb = InlineKeyboardMarkup([buttons])
+    await update.message.reply_text(text, parse_mode="HTML", reply_markup=kb)
 
 
 async def on_document(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
