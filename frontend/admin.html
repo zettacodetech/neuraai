@@ -54,6 +54,11 @@
         <div class="admin-link"><a href="/">← Saytga qaytish</a></div>
       </div>
       <div id="panel" hidden>
+        <div class="card" id="statsCard">
+          <h1>📊 Statistika</h1>
+          <p class="sub" id="statsSub">Yuklanmoqda...</p>
+          <div id="statsBody" style="font-size:0.9rem;line-height:2"></div>
+        </div>
         <div class="card">
           <h1>❓ Yechilmagan savollar</h1>
           <p class="sub" id="countSub">Yuklanmoqda...</p>
@@ -78,6 +83,45 @@
       if (!res.ok) throw Object.assign(new Error(data.error || "xato"), { status: res.status });
       return data;
     }
+
+    async function loadStats() {
+      const key = sessionStorage.getItem("neura_admin_key") || "";
+      try {
+        const st = await apiFetch("/api/admin/stats?key=" + encodeURIComponent(key));
+        document.getElementById("statsSub").textContent =
+          "Umumiy ko'rsatkichlar · " + (st.by_day && st.by_day.length ? "oxirgi 7 kun" : "bugun");
+        const srcIco = { intent: "⚡", code: "💻", knowledge: "📚", websearch: "🌍", llm: "🤖", fallback: "🛡", generation: "🎨", vision: "👁", ollama: "🖥" };
+        const srcLabels = { intent: "Tezkor", code: "Kod", knowledge: "Bilim", websearch: "Internet", llm: "AI", fallback: "Zaxira", generation: "Generatsiya", vision: "Rasm", ollama: "Lokal" };
+        const rows = [
+          ["👥 Foydalanuvchilar", st.users],
+          ["💬 Suhbatlar", st.conversations],
+          ["✉️ Xabarlar", st.messages],
+          ["📝 Notalar", st.notes],
+          ["🎁 Referallar", st.referrals],
+        ].map(([l, v]) => '<div style="display:flex;justify-content:space-between;border-bottom:1px solid var(--border);padding:4px 0"><span>' + l + '</span><b>' + v + "</b></div>").join("");
+        let src = "";
+        if (st.by_source && st.by_source.length) {
+          const max = Math.max(1, ...st.by_source.map((s) => s.n));
+          src = st.by_source.map((s) => {
+            const ico = srcIco[s.source] || "•";
+            const label = srcLabels[s.source] || s.source;
+            return '<div style="display:flex;align-items:center;gap:8px;padding:3px 0">' +
+              '<span style="width:22px">' + ico + '</span>' +
+              '<small style="width:80px">' + label + '</small>' +
+              '<div style="flex:1;background:var(--panel2);border-radius:6px;height:8px">' +
+              '<i style="display:block;height:8px;border-radius:6px;background:var(--grad);width:' + Math.round(s.n / max * 100) + '%"></i></div>' +
+              "<b>" + s.n + "</b></div>";
+          }).join("");
+        }
+        let top = "";
+        if (st.top_users && st.top_users.length) {
+          top = '<div style="margin-top:8px;padding:6px 0;border-top:1px solid var(--border)"><b>Top foydalanuvchilar:</b></div>' +
+            st.top_users.map((u) => '<div style="font-size:0.85rem;color:var(--muted)">' + escH(u.name || u.username) + " — " + u.n + " xabar</div>").join("");
+        }
+        document.getElementById("statsBody").innerHTML = rows + src + top;
+      } catch (e) { document.getElementById("statsBody").innerHTML = '<div class="empty">' + esc(e.message) + "</div>"; }
+    }
+    function escH(t) { const d = document.createElement("div"); d.textContent = String(t || ""); return d.innerHTML; }
 
     async function refreshList() {
       const key = sessionStorage.getItem("neura_admin_key") || "";
@@ -131,6 +175,7 @@
         await apiFetch("/api/admin/unanswered?key=" + encodeURIComponent(key));
         lockCard.hidden = true;
         panel.hidden = false;
+        loadStats();
         refreshList();
       } catch (e) {
         sessionStorage.removeItem("neura_admin_key");
@@ -142,6 +187,7 @@
       apiFetch("/api/admin/unanswered?key=" + encodeURIComponent(savedKey)).then(() => {
         lockCard.hidden = true;
         panel.hidden = false;
+        loadStats();
         refreshList();
       }).catch(() => {});
     }

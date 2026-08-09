@@ -804,6 +804,57 @@ def chat_stream(req: ChatRequest) -> StreamingResponse | JSONResponse:
     )
 
 
+class SummaryRequest(BaseModel):
+    token: str = ""
+    conversation_id: int = 0
+
+
+@app.post("/api/chat/summary")
+def chat_summary(req: SummaryRequest) -> JSONResponse:
+    """Suhbatni local AI bilan qisqacha xulosa qilish (SSE emas, to'liq)."""
+    db = get_db()
+    user = db.get_user_by_token(req.token) if req.token else None
+    if not user:
+        return JSONResponse({"error": "kirish talab qilinadi"}, status_code=401)
+    if not req.conversation_id:
+        return JSONResponse({"error": "conversation_id kerak"}, status_code=400)
+    conv = db.get_conversation(req.conversation_id)
+    if not conv or conv["user_id"] != user["id"]:
+        return JSONResponse({"error": "suhbat topilmadi"}, status_code=404)
+    msgs = db.conversation_messages(req.conversation_id, user["id"])
+    if not msgs:
+        return JSONResponse({"error": "suhbat bo'sh"}, status_code=400)
+    lines = []
+    for m in msgs:
+        who = "Foydalanuvchi" if m["role"] == "user" else "AI"
+        text = (m["text"] or "").strip()
+        if text:
+            lines.append(f"{who}: {text[:300]}")
+    convo_text = "\n".join(lines[-40:])  # oxirgi 40 xabar
+    import llm
+
+    prompt = (
+        "Quyidagi suhbatni 5-8 qisqa qatorda o'zbek tilida xulosa qil. "
+        "Asosiy muhokama qilingan mavzular, savollar va yakuniy natijani korsat.\n\n"
+        + convo_text
+    )
+    try:
+        result = llm.llm_answer(
+            prompt,
+            history=[],
+            context="",
+            model="local" if llm.llm_available() else "auto",
+        )
+    except Exception as e:
+        return JSONResponse({"error": f"Xulosa xato: {e}"}, status_code=500)
+    if not result:
+        return JSONResponse(
+            {"error": "Local AI javob bermadi (Ollama server holati tekshiring)"},
+            status_code=502,
+        )
+    return JSONResponse({"ok": True, "summary": result})
+
+
 @app.post("/api/feedback")
 def feedback(req: FeedbackRequest) -> JSONResponse:
     db = get_db()
@@ -1806,6 +1857,7 @@ def me(token: str = "") -> JSONResponse:
             "phone": user.get("phone") or "",
             "telegram_id": user.get("telegram_id") or None,
             "referal_code": user.get("referal_code") or "",
+            "avatar": user.get("avatar") or "",
         }
     )
 
@@ -1876,6 +1928,46 @@ def session(client_id: str = "") -> JSONResponse:
     token = new_token()
     db.set_token(user_id, token)
     return JSONResponse({"token": token, "guest": True})
+
+
+class AvatarRequest(BaseModel):
+    token: str
+    image: str  # base64 (rasm ma'lumotlari)
+
+
+@app.post("/api/profile/avatar")
+async def set_avatar(req: AvatarRequest) -> JSONResponse:
+    """Foydalanuvchi avatarini yuklash (base64 -> fayl)."""
+    db = get_db()
+    user = db.get_user_by_token(req.token)
+    if not user:
+        return JSONResponse({"error": "kirish talab qilinadi"}, status_code=401)
+    raw = req.image or ""
+    if raw.startswith("data:"):
+        raw = raw.split(",", 1)[-1]
+    import base64
+
+    try:
+        data = base64.b64decode(raw)
+    except Exception:
+        return JSONResponse({"error": "noto'g'ri rasm formati"}, status_code=400)
+    if len(data) > 3 * 1024 * 1024:
+        return JSONResponse({"error": "rasm juda katta (3 MB)"}, status_code=400)
+    import hashlib
+
+    ext = "jpg"
+    # PNG ekanini aniqlash
+    if data[:8] == b"\x89PNG\r\n\x1a\n":
+        ext = "png"
+    fname = f"avatar_{user['id']}_{hashlib.md5(data[:64]).hexdigest()[:8]}.{ext}"
+    avatars_dir = os.path.join(FRONTEND, "static", "avatars")
+    os.makedirs(avatars_dir, exist_ok=True)
+    path = os.path.join(avatars_dir, fname)
+    with open(path, "wb") as f:
+        f.write(data)
+    url = f"/static/avatars/{fname}"
+    db.set_avatar(user["id"], url)
+    return JSONResponse({"ok": True, "avatar": url})
 
 
 # ================= API kalitlari (bepul, limitle) =================
@@ -1949,12 +2041,57 @@ def logout(token: str = "") -> JSONResponse:
 
 
 @app.get("/api/conversations")
-def conversations(token: str = "") -> JSONResponse:
+def conversations(token: str = "", folder: str = "", archived: int = 0) -> JSONResponse:
     db = get_db()
     user = db.get_user_by_token(token)
     if not user:
         return JSONResponse({"error": "kirish talab qilinadi"}, status_code=401)
-    return JSONResponse({"items": db.list_conversations(user["id"])})
+    return JSONResponse(
+        {
+            "items": db.list_conversations(
+                user["id"], folder=folder or "", archived=archived
+            ),
+            "folders": db.list_folders(user["id"]),
+        }
+    )
+
+
+class ConvFolderRequest(BaseModel):
+    token: str
+    conversation_id: int
+    folder: str = ""
+
+
+@app.post("/api/conversations/folder")
+def conversation_set_folder(req: ConvFolderRequest) -> JSONResponse:
+    db = get_db()
+    user = db.get_user_by_token(req.token)
+    if not user:
+        return JSONResponse({"error": "kirish talab qilinadi"}, status_code=401)
+    if not req.conversation_id:
+        return JSONResponse({"error": "conversation_id kerak"}, status_code=400)
+    if not db.set_conversation_folder(req.conversation_id, user["id"], req.folder):
+        return JSONResponse({"error": "suhbat topilmadi"}, status_code=404)
+    return JSONResponse({"ok": True, "folders": db.list_folders(user["id"])})
+
+
+class ConvArchive(BaseModel):
+    token: str
+    conversation_id: int
+    archived: bool = False
+
+
+@app.post("/api/conversations/archive")
+def api_set_archive(req: ConvArchive) -> JSONResponse:
+    db = get_db()
+    user = db.get_user_by_token(req.token)
+    if not user:
+        return JSONResponse({"error": "kirish talab qilinadi"}, status_code=401)
+    if not db.set_conversation_archived(
+        req.conversation_id, user["id"], 1 if req.archived else 0
+    ):
+        return JSONResponse({"error": "suhbat topilmadi"}, status_code=404)
+    return JSONResponse({"ok": True})
 
 
 @app.get("/api/conversations/{conv_id}")
@@ -2086,6 +2223,14 @@ def list_models() -> JSONResponse:
 
 
 # ================= admin =================
+
+
+@app.get("/api/admin/stats")
+def admin_stats(key: str = "") -> JSONResponse:
+    if key != ADMIN_KEY:
+        return JSONResponse({"error": "ruxsat yo'q"}, status_code=403)
+    db = get_db()
+    return JSONResponse(db.admin_stats())
 
 
 @app.get("/api/admin/unanswered")

@@ -328,6 +328,7 @@ class Database:
                         "token",
                         "client_id",
                         "referal_code",
+                        "avatar",
                     ):
                         cur.execute(
                             f"ALTER TABLE users ADD COLUMN IF NOT EXISTS {col} TEXT"
@@ -335,6 +336,10 @@ class Database:
                     for col in ("name", "models"):
                         cur.execute(
                             f"ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS {col} TEXT"
+                        )
+                    for col in ("folder", "archived"):
+                        cur.execute(
+                            f"ALTER TABLE conversations ADD COLUMN IF NOT EXISTS {col} TEXT"
                         )
                 self.conn.commit()
             return
@@ -349,9 +354,19 @@ class Database:
                 "phone",
                 "token",
                 "referal_code",
+                "avatar",
             ):
                 if col not in user_cols:
                     self.conn.execute(f"ALTER TABLE users ADD COLUMN {col} TEXT")
+            conv_cols = [
+                r[1] for r in self.conn.execute("PRAGMA table_info(conversations)")
+            ]
+            if "folder" not in conv_cols:
+                self.conn.execute("ALTER TABLE conversations ADD COLUMN folder TEXT")
+            if "archived" not in conv_cols:
+                self.conn.execute(
+                    "ALTER TABLE conversations ADD COLUMN archived INTEGER DEFAULT 0"
+                )
             msg_cols = [r[1] for r in self.conn.execute("PRAGMA table_info(messages)")]
             if "conversation_id" not in msg_cols:
                 self.conn.execute(
@@ -573,6 +588,9 @@ class Database:
                 (name, surname, phone, user_id),
             )
 
+    def set_avatar(self, user_id: int, avatar_url: str) -> None:
+        self._execute("UPDATE users SET avatar = ? WHERE id = ?", (avatar_url, user_id))
+
     def get_password_hash(self, user_id: int) -> str | None:
         row = self._row("SELECT password_hash FROM users WHERE id = ?", (user_id,))
         return row["password_hash"] if row else None
@@ -596,18 +614,51 @@ class Database:
         row = self._row("SELECT * FROM conversations WHERE id = ?", (conv_id,))
         return dict(row) if row else None
 
-    def list_conversations(self, user_id: int) -> list:
+    def list_conversations(
+        self, user_id: int, folder: str = "", archived: int = 0
+    ) -> list:
         rows = self._rows(
             """
-            SELECT c.id, c.title, c.created_at,
+            SELECT c.id, c.title, c.created_at, c.folder, c.archived,
                    (SELECT count(*) FROM messages m WHERE m.conversation_id = c.id) AS msg_count
             FROM conversations c
-            WHERE c.user_id = ?
-            ORDER BY c.id DESC LIMIT 100
+            WHERE c.user_id = ? AND COALESCE(c.archived, 0) = ?
+            AND (? = '' OR COALESCE(c.folder, '') = ?)
+            ORDER BY c.id DESC LIMIT 200
             """,
-            (user_id,),
+            (user_id, archived, folder, folder),
         )
         return [dict(r) for r in rows]
+
+    def list_folders(self, user_id: int) -> list:
+        rows = self._rows(
+            "SELECT DISTINCT COALESCE(folder, '') AS folder FROM conversations "
+            "WHERE user_id = ? AND COALESCE(folder, '') != '' ORDER BY folder",
+            (user_id,),
+        )
+        return [r["folder"] for r in rows]
+
+    def set_conversation_folder(self, conv_id: int, user_id: int, folder: str) -> bool:
+        conv = self.get_conversation(conv_id)
+        if not conv or conv["user_id"] != user_id:
+            return False
+        self._execute(
+            "UPDATE conversations SET folder = ? WHERE id = ? AND user_id = ?",
+            (folder.strip()[:40] or None, conv_id, user_id),
+        )
+        return True
+
+    def set_conversation_archived(
+        self, conv_id: int, user_id: int, archived: int
+    ) -> bool:
+        conv = self.get_conversation(conv_id)
+        if not conv or conv["user_id"] != user_id:
+            return False
+        self._execute(
+            "UPDATE conversations SET archived = ? WHERE id = ? AND user_id = ?",
+            (1 if archived else 0, conv_id, user_id),
+        )
+        return True
 
     def conversation_messages(self, conv_id: int, user_id: int) -> list:
         rows = self._rows(
@@ -666,6 +717,42 @@ class Database:
             "by_source": [dict(r) for r in by_source],
             "by_day": [dict(r) for r in by_day],
             "rated": rated["n"] if rated else 0,
+        }
+
+    def admin_stats(self) -> dict:
+        """Admin panel uchun umumiy statistika."""
+
+        def cnt(sql: str) -> int:
+            row = self._row(sql)
+            return row["n"] if row else 0
+
+        users = cnt("SELECT count(*) AS n FROM users")
+        convs = cnt("SELECT count(*) AS n FROM conversations")
+        msgs = cnt("SELECT count(*) AS n FROM messages")
+        notes = cnt("SELECT count(*) AS n FROM notes")
+        refs = cnt("SELECT count(*) AS n FROM referrals")
+        for_sources = self._rows(
+            "SELECT source, count(*) AS n FROM messages WHERE role = 'assistant' "
+            "GROUP BY source ORDER BY n DESC LIMIT 8"
+        )
+        for_days = self._rows(
+            "SELECT substr(created_at, 1, 10) AS day, count(*) AS n "
+            "FROM messages GROUP BY day ORDER BY day DESC LIMIT 7"
+        )
+        top_users = self._rows(
+            "SELECT u.username, u.name, count(m.id) AS n FROM messages m "
+            "JOIN users u ON u.id = m.user_id GROUP BY u.id "
+            "ORDER BY n DESC LIMIT 10"
+        )
+        return {
+            "users": users,
+            "conversations": convs,
+            "messages": msgs,
+            "notes": notes,
+            "referrals": refs,
+            "by_source": [dict(r) for r in for_sources],
+            "by_day": [dict(r) for r in for_days],
+            "top_users": [dict(r) for r in top_users],
         }
 
     # ================= messages =================

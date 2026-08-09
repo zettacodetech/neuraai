@@ -278,7 +278,9 @@ button:focus-visible, a:focus-visible, textarea:focus-visible, input:focus-visib
 .user-ava {
   width: 38px; height: 38px; border-radius: 50%; flex-shrink: 0;
   background: var(--grad); display: grid; place-items: center; font-weight: 800;
+  overflow: hidden;
 }
+.user-ava img { width: 100%; height: 100%; object-fit: cover; }
 .user-info { min-width: 0; flex: 1; }
 .user-name { font-weight: 700; font-size: 0.92rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .user-login { color: var(--muted); font-size: 0.75rem; }
@@ -391,6 +393,16 @@ a.accent-btn, a.head-btn { text-decoration: none; display: inline-flex; align-it
   position: relative; z-index: 2;
 }
 .chips { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 10px; }
+.chips.mini { padding-bottom: 2px; margin-top: -2px; }
+.chips.mini .slash { flex: 0 0 auto; font-size: 0.66rem; padding: 3px 9px; background: transparent; border-color: var(--border); color: var(--muted);
+  border-radius: 999px; border: 1px solid var(--border); cursor: pointer; transition: color .2s, border-color .2s; }
+.chips.mini .slash:hover { color: var(--text); border-color: var(--accent, #7c5dfa); }
+.conv-fold { display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 6px; font-size: 0.62rem;
+  background: rgba(124,93,250,.16); color: #8b7cf8; }
+.arch-btn { margin-left: auto; font-size: 0.72rem; padding: 3px 8px; border-radius: 8px; cursor: pointer;
+  background: var(--panel2); color: var(--muted); border: 1px solid var(--border); }
+.arch-btn.on { background: rgba(124,93,250,.18); color: #c4b5fd; border-color: #7c5dfa; }
+.status.off .dot { background: #f87171 !important; animation: none; }
 .chip {
   flex-shrink: 0; padding: 8px 14px; border-radius: 999px; font-size: 0.83rem;
   border: 1px solid var(--border); background: var(--panel); color: var(--muted); white-space: nowrap;

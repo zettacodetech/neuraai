@@ -236,7 +236,9 @@ $ neura ollama run qwen2.5</code></pre>
         Yangi suhbat
       </button>
 
-      <div class="conv-head">Suhbatlarim</div>
+      <div class="conv-head">Suhbatlarim
+        <button class="arch-btn" id="archBtn" title="Arxivlanganlar">🗄 Arxiv</button>
+      </div>
       <div class="conv-list" id="convList">
         <div class="conv-empty" id="convEmpty">Hali suhbatlar yo'q.<br>Birinchi savolingizni yozing!</div>
       </div>
@@ -340,6 +342,12 @@ $ neura ollama run qwen2.5</code></pre>
           <button class="chip" data-gen="video">🎬 Video yarat</button>
           <button class="chip" data-gen-type="music">🎵 Musiqa yarat</button>
           <button class="chip" data-gen-type="voice">🗣 Ovoz yarat</button>
+        </div>
+        <div class="chips mini" id="slashChips">
+          <button class="chip slash" data-slash="/sum">📋 /sum — xulosa</button>
+          <button class="chip slash" data-slash="/note ">📝 /note — eslatma</button>
+          <button class="chip slash" data-slash="/notes">🗂 /notes</button>
+          <button class="chip slash" data-slash="/export">📤 /export</button>
         </div>
         <div class="input-row">
           <textarea id="input" rows="1" placeholder="InomjonAI ga savol yuboring..." autofocus></textarea>

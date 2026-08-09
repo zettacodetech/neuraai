@@ -87,6 +87,18 @@
       <div class="auth-err" id="profileErr"></div>
       <div class="auth-ok" id="profileOk"></div>
 
+      <div class="profile-divider">🖼 Avatar</div>
+      <div style="display:flex;align-items:center;gap:14px">
+        <img id="avatarPreview" src="/static/icons/logo.png" alt="Avatar" style="width:64px;height:64px;border-radius:50%;object-fit:cover;border:2px solid var(--border)" />
+        <div style="flex:1">
+          <label class="tg-bind-btn" style="cursor:pointer;justify-content:center">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+            <span>Yuklash</span>
+            <input type="file" id="avatarInput" accept="image/png,image/jpeg" hidden />
+          </label>
+        </div>
+      </div>
+
       <form id="profileForm" novalidate>
         <div class="profile-divider">👤 Shaxsiy ma'lumotlar</div>
         <div class="profile-grid block">
@@ -215,6 +227,7 @@
         localStorage.setItem("neura_user", JSON.stringify(u));
         tgLinked = u.telegram_id || null;
         renderTgBind();
+        if (u.avatar) document.getElementById("avatarPreview").src = u.avatar;
         try {
           const st = await apiFetch("/api/stats?token=" + encodeURIComponent(token));
           document.querySelector("#statsGrid .stat-cell:nth-child(1) b").textContent = st.messages;
@@ -281,6 +294,27 @@
         localStorage.removeItem("neura_token");
         localStorage.removeItem("neura_user");
         location.href = "/login";
+      };
+
+      document.getElementById("avatarInput").onchange = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        if (file.size > 3 * 1024 * 1024) { showErr(profileErr, "Rasm juda katta (max 3 MB)"); return; }
+        const reader = new FileReader();
+        reader.onload = async () => {
+          try {
+            const res = await fetch("/api/profile/avatar", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ token, image: String(reader.result) }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || "xato");
+            document.getElementById("avatarPreview").src = data.avatar;
+            showOk(profileOk, "✅ Avatar yangilandi");
+          } catch (ex) { showErr(profileErr, ex.message); }
+        };
+        reader.readAsDataURL(file);
       };
     }
   </script>

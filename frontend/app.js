@@ -444,6 +444,10 @@ function showWelcome() {
     { e: "💻", t: "Kod", d: "Dasturlash kodlari yozadi", q: "Python dastur yozib ber: foydalanuvchi ismini so'rab, salomlashadigan" },
     { e: "📷", t: "Rasm tahlili", d: "Rasmni o'qiydi va izohlaydi", file: true },
     { e: "🌍", t: "Qidiruv", d: "Internetdan yangi ma'lumot", q: "O'zbekiston bo'yicha so'nggi kunlardagi muhim yangiliklarni topib ber" },
+    { e: "🏖", t: "Sayohat reja", d: "3 kunlik sayohat rejasini tuzadi", q: "Toshkentdan Samarqandga 2 kunga beg: mehmonxona, restoran va joylar bilan reja tuzib ber" },
+    { e: "💪", t: "Mashq dasturi", d: "Haftalik jismoniy mashqlar", q: "Yangi boshlovchi uchun haftalik 30 daqiqalik jismoniy mashq dasturi tuzib ber" },
+    { e: "🍳", t: "Retsept", d: "Taom tayyorlash bo'yicha ko'rsatma", q: "Osh tayyorlashning oddiy retsepti bo'ylama ko'rsatma bilan yozib ber" },
+    { e: "🎓", t: "O'qish", d: "Mavzuni oddiy tilda tushuntiradi", q: "Gravitatsiya nima ekanligini 5 yoshli bolaga tushuntiradigan qilib aytib ber" },
     { e: "🎨", t: "Rasm yaratish", d: "Prompt bo'yicha rasm chizadi", art: "image" },
     { e: "🎬", t: "Video yaratish", d: "Matnni videoga aylantiradi", art: "video" },
     { e: "🎵", t: "Musiqa yaratish", d: "Tavsif bo'yicha musiqa yaratadi", genType: "music" },
@@ -483,6 +487,27 @@ async function send(text) {
     return;
   }
   if (text === "/notes") { loadNotes(); openModal("notesModal"); input.value = ""; return; }
+  if (text === "/sum") {
+    input.value = "";
+    if (!currentConv) { toast("Avval suhbatni oching"); return; }
+    const typing = typingRow();
+    try {
+      const res = await fetch("/api/chat/summary", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: me.token, conversation_id: currentConv }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw Object.assign(new Error(data.error || "xato"), { status: res.status });
+      typing.remove();
+      qMessage("ai", "📋 Suhbat xulosasi:\n\n" + data.summary);
+      flashRow(document.querySelector(".row.ai.msg-in:last-of-type"));
+    } catch (e) {
+      typing.remove();
+      qMessage("ai", "⚠️ Xulosa xatosi: " + (e.message || "qayta urinib ko'ring"));
+    }
+    return;
+  }
   if (text === "/export") {
     if (currentConv) {
       try {
@@ -667,19 +692,47 @@ async function sendImage(file) {
   qImage(row, "user", URL.createObjectURL(file), file.name);
   const typing = typingRow();
 
+  // Rasmni base64 ga aylantiramiz (local vision model uchun)
+  const toBase64 = (f) => new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result).split(",")[1]);
+    r.onerror = reject;
+    r.readAsDataURL(f);
+  });
+
   try {
-    const fd = new FormData();
-    fd.append("file", file);
-    const res = await fetch("/api/analyze-image", { method: "POST", body: fd });
+    const b64 = await toBase64(file);
+    // 1) Local AI vision (qwen2.5-vl) — birinchi urinish
+    const res = await fetch("/api/vision", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        image: b64,
+        prompt: "Ushbu rasmni tahlil qilib, undagi narsalarni, matnni va holatni o'zbekcha batafsil tushuntir.",
+      }),
+    });
     const data = await res.json();
     if (!res.ok) throw Object.assign(new Error(data.error || "xato"), { status: res.status });
     typing.remove();
-    qMessage("ai", formatAnalysis(data));
+    qMessage("ai", data.analysis || "Tahlil topilmadi");
     flashRow(document.querySelector(".row.ai.msg-in:last-of-type"));
     confettiBurst();
   } catch (e) {
-    typing.remove();
-    qMessage("ai", "⚠️ Rasm tahlili xatosi: " + (e.message || "qayta urinib ko'ring"));
+    // 2) Fallback: heuristics tahlil
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res2 = await fetch("/api/analyze-image", { method: "POST", body: fd });
+      const data2 = await res2.json();
+      if (!res2.ok) throw Object.assign(new Error(data2.error || "xato"), { status: res2.status });
+      typing.remove();
+      qMessage("ai", formatAnalysis(data2));
+      flashRow(document.querySelector(".row.ai.msg-in:last-of-type"));
+      confettiBurst();
+    } catch (e2) {
+      typing.remove();
+      qMessage("ai", "⚠️ Rasm tahlili xatosi: " + (e2.message || "qayta urinib ko'ring"));
+    }
   }
   sending = false;
   sendBtn.disabled = false;
@@ -808,13 +861,21 @@ async function genArt(kind) {
 
 /* ================= suhbatlar (tarix) ================= */
 
-async function refreshConversations() {
+async function refreshConversations(archived = 0) {
   if (!me || !me.token) return;
   try {
-    const data = await api("/api/conversations?token=" + encodeURIComponent(me.token));
+    const data = await api("/api/conversations?token=" + encodeURIComponent(me.token) + "&archived=" + (archived ? 1 : 0));
     renderConvList(data.items);
   } catch (e) { /* indamaslik */ }
 }
+
+let showArchived = false;
+const archBtn = document.getElementById("archBtn");
+if (archBtn) archBtn.onclick = () => {
+  showArchived = !showArchived;
+  archBtn.classList.toggle("on", showArchived);
+  refreshConversations(showArchived ? 1 : 0);
+};
 
 function renderConvList(items) {
   convItems = items;
@@ -824,22 +885,51 @@ function renderConvList(items) {
     const btn = document.createElement("div");
     btn.className = "conv-item" + (currentConv === c.id ? " active" : "");
     btn.dataset.id = c.id;
+    const folderTag = c.folder ? '<span class="conv-fold">' + esc(c.folder) + '</span>' : "";
     btn.innerHTML =
       '<span class="conv-ico"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>' +
       '<span class="conv-info"><span class="conv-title">' + esc(c.title) + "</span>" +
-      '<span class="conv-meta">' + c.msg_count + " xabar · " + fmtDate(c.created_at) + "</span></span>" +
+      '<span class="conv-meta">' + c.msg_count + " xabar · " + fmtDate(c.created_at) + folderTag + "</span></span>" +
       '<span class="conv-actions">' +
+      '<button class="conv-act" title="Papka" data-act="folder"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></button>' +
+      '<button class="conv-act" title="Arxivlash" data-act="archive"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"/></svg></button>' +
       '<button class="conv-act" title="Nomlash" data-act="rename"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/></svg></button>' +
       '<button class="conv-act" title="TXT yuklab olish" data-act="export"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg></button>' +
       '<button class="conv-act danger" title="O\'chirish" data-act="del"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button>' +
       "</span>";
     btn.querySelector(".conv-info").onclick = () => openConversation(c.id);
+    btn.querySelector('[data-act="folder"]').onclick = (e) => { e.stopPropagation(); askFolder(c); };
+    btn.querySelector('[data-act="archive"]').onclick = (e) => { e.stopPropagation(); archiveConv(c); };
     btn.querySelector('[data-act="rename"]').onclick = (e) => { e.stopPropagation(); renameConversation(c.id); };
     btn.querySelector('[data-act="export"]').onclick = (e) => { e.stopPropagation(); exportConversation(c.id); };
     btn.querySelector('[data-act="del"]').onclick = (e) => { e.stopPropagation(); deleteConversation(c.id); };
     convList.appendChild(btn);
   });
   updateStats(items);
+}
+
+function askFolder(c) {
+  const cur = c.folder || "";
+  const val = prompt(cur ? "Papkani o'zgartirish (bo'sh qoldirsangiz — o'chiriladi):" : "Papka nomini kiriting:", cur);
+  if (val === null) return;
+  api("/api/conversations/folder", {
+    method: "POST",
+    body: JSON.stringify({ token: me.token, conversation_id: c.id, folder: val.trim() }),
+  }).then((d) => {
+    toast(d.folders ? "Papka saqlandi" : "Saqlandi");
+    refreshConversations();
+  }).catch((e) => toast(e.message));
+}
+
+function archiveConv(c) {
+  const arch = c.archived ? 0 : 1;
+  api("/api/conversations/archive", {
+    method: "POST",
+    body: JSON.stringify({ token: me.token, conversation_id: c.id, archived: arch }),
+  }).then(() => {
+    toast(arch ? "Arxivlandi" : "Qayta tiklandi");
+    refreshConversations();
+  }).catch((e) => toast(e.message));
 }
 
 /* ================= jonli statistika ================= */
@@ -878,6 +968,14 @@ if (scrollDownBtn) {
   scrollDownBtn.onclick = () => chat.scrollTo({ top: chat.scrollHeight, behavior: "smooth" });
   chat.addEventListener("scroll", chatOnScroll, { passive: true });
 }
+
+document.querySelectorAll("#slashChips .chip.slash").forEach((b) => {
+  b.onclick = () => {
+    const s = b.dataset.slash;
+    if (s === "/note ") { input.focus(); input.value = "/note "; input.setSelectionRange(input.value.length, input.value.length); autoResize(); }
+    else send(s);
+  };
+});
 
 async function openConversation(id) {
   if (!me) return;
@@ -947,9 +1045,12 @@ function renderUser() {
   }
   if (loginTopBtn) loginTopBtn.style.display = "none";
   const initial = (me.name || me.username || "?").charAt(0).toUpperCase();
+  const avaHtml = me.avatar
+    ? '<div class="user-ava"><img src="' + esc(me.avatar) + '" alt="avatar" /></div>'
+    : '<div class="user-ava">' + esc(initial) + "</div>";
   sideUser.innerHTML =
     '<button class="user-card" id="userCard" title="Profil">' +
-    '<div class="user-ava">' + esc(initial) + "</div>" +
+    avaHtml +
     '<div class="user-info"><div class="user-name">' + esc(me.name || me.username || "") + '</div><div class="user-login">' + "@" + esc(me.username.toLowerCase()) + "</div></div>" +
     "</button>" +
     '<button class="logout-btn" id="logoutBtn" title="Chiqish">Chiqish</button>';
@@ -1446,6 +1547,7 @@ async function boot() {
         surname: u.surname || "",
         email: u.email || "",
         phone: u.phone || "",
+        avatar: u.avatar || "",
       };
       cacheUser(me);
       renderUser();
@@ -1854,6 +1956,18 @@ document.addEventListener("click", (e) => {
 })();
 
 /* ================= Yangi: Til tanlash / i18n ================= */
+
+// Offlayn/onlayn indikator
+(function netWatch() {
+  const st = document.querySelector(".status");
+  if (!st) return;
+  const set = (on) => {
+    st.classList.toggle("off", !on);
+    st.innerHTML = on ? '<span class="dot"></span> Onlayn' : '<span class="dot"></span> Offlayn';
+  };
+  window.addEventListener("online", () => set(true));
+  window.addEventListener("offline", () => set(false));
+})();
 
 function toast(msg) {
   let el = document.getElementById("toastBox");
