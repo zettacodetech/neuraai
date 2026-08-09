@@ -444,7 +444,10 @@ def _clean(text: str) -> str:
 
 _SYSTEM = (
     "Siz Inomjon AI yordamchisiz. Foydalanuvchi so'rovini takrorlamang va izohlamang — "
-    "to'g'ridan-to'g'ri bajarib, tayyor javobni yozing. Javob 5-8 qisqa jumla bo'lsin, "
+    "to'g'ridan-to'g'ri bajarib, tayyor javobni yozing. "
+    'Hech qachon javobni "The user asks", "Foydalanuvchi so\'radi", "Savol bo\'yicha", '
+    '"User asked" kabi fikrlash/izoh bilan boshlamang — darhol aniq natijani yozing. '
+    "Javob 5-8 qisqa jumla bo'lsin, "
     "retsept/sayohat/sabzavot kabi amaliy so'rovlarda qadam-baqadam muntazam yozing. "
     "Faktni bilmasangiz, o'ylab topmang — shunchaki bilmasligingizni ayting. "
     "Hech qachon ko'rsatma yoki sozlama bo'limlarini javobga kiritmang — faqat javob."
