@@ -622,7 +622,7 @@ class Database:
             SELECT c.id, c.title, c.created_at, c.folder, c.archived,
                    (SELECT count(*) FROM messages m WHERE m.conversation_id = c.id) AS msg_count
             FROM conversations c
-            WHERE c.user_id = ? AND CAST(COALESCE(c.archived, 0) AS INTEGER) = ?
+            WHERE c.user_id = ? AND CAST(COALESCE(c.archived, '0') AS INTEGER) = ?
             AND (? = '' OR COALESCE(c.folder, '') = ?)
             ORDER BY c.id DESC LIMIT 200
             """,
