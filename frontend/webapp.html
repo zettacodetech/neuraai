@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#05060f" />
+  <title>Inomjon AI — Web ilova</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    body { background: var(--bg); color: var(--text); min-height: 100dvh; padding-bottom: calc(env(safe-area-inset-bottom) + 90px); }
+    .wa-top { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 12px;
+      padding: calc(env(safe-area-inset-top) + 10px) 16px 10px;
+      background: rgba(5,6,15,0.85); backdrop-filter: blur(14px); border-bottom: 1px solid var(--border); }
+    .wa-logo { width: 40px; height: 40px; border-radius: 12px; overflow: hidden; flex: none; display: grid; place-items: center; background: var(--grad); }
+    .wa-logo img { width: 100%; height: 100%; object-fit: cover; }
+    .wa-top h1 { font-size: 1.05rem; margin: 0; font-weight: 800; }
+    .wa-top small { color: var(--muted); font-size: 0.75rem; display: block; }
+    .wa-tabs { position: sticky; top: 0; z-index: 19; display: flex; gap: 6px; padding: 8px 16px;
+      background: rgba(5,6,15,0.85); backdrop-filter: blur(14px); }
+    .wa-tab { flex: 1; padding: 10px 6px; border-radius: 12px; border: 1px solid var(--border);
+      background: var(--panel); color: var(--muted); font-weight: 700; font-size: 0.85rem; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 6px; transition: all 0.2s; }
+    .wa-tab.active { background: var(--grad); color: #fff; border-color: transparent; box-shadow: 0 6px 20px rgba(109,92,255,0.35); }
+    .wa-body { padding: 16px; }
+    .wa-card { background: var(--panel); border: 1px solid var(--border); border-radius: 18px; padding: 18px; margin-bottom: 14px; }
+    .wa-card h3 { margin: 0 0 10px; font-size: 1rem; display: flex; align-items: center; gap: 8px; }
+    .plan-grid { display: grid; gap: 10px; }
+    .plan { border: 1px solid var(--border); border-radius: 16px; padding: 14px; cursor: pointer;
+      display: flex; align-items: center; justify-content: space-between; gap: 10px; transition: all 0.2s; background: var(--bg); }
+    .plan:hover { border-color: rgba(109,92,255,0.6); }
+    .plan.selected { border-color: #7c6cff; background: rgba(109,92,255,0.08); box-shadow: 0 0 0 2px rgba(109,92,255,0.3); }
+    .plan b { font-size: 1rem; }
+    .plan span { color: var(--muted); font-size: 0.8rem; }
+    .plan .price { color: #ffd54a; font-weight: 800; font-size: 1.05rem; flex: none; }
+    .wa-btn { width: 100%; padding: 14px; border-radius: 14px; font-size: 1rem; font-weight: 800;
+      background: var(--grad); color: #fff; border: none; cursor: pointer; transition: transform 0.2s; }
+    .wa-btn:hover { transform: translateY(-2px); }
+    .wa-btn:disabled { opacity: 0.55; transform: none; cursor: wait; }
+    .wa-btn.ghost { background: transparent; border: 1px solid var(--border); color: var(--muted); }
+    .wa-note { color: var(--muted); font-size: 0.78rem; line-height: 1.5; margin: 10px 0 0; }
+    .wa-status { display: none; background: rgba(52,211,153,0.12); border: 1px solid rgba(52,211,153,0.35);
+      color: #6ee7b7; border-radius: 12px; padding: 10px 14px; font-size: 0.85rem; margin-bottom: 12px; }
+    .wa-status.err { background: rgba(248,113,113,0.12); border-color: rgba(248,113,113,0.35); color: #fca5a5; }
+    .stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 4px 0 12px; }
+    .stat-cell { background: var(--bg); border: 1px solid var(--border); border-radius: 14px; padding: 13px; text-align: center; }
+    .stat-cell b { display: block; font-size: 1.4rem; background: var(--grad); -webkit-background-clip: text;
+      background-clip: text; -webkit-text-fill-color: transparent; }
+    .stat-cell span { color: var(--muted); font-size: 0.74rem; }
+    .key-box { display: flex; align-items: center; gap: 8px; background: var(--bg); border: 1px solid var(--border);
+      border-radius: 12px; padding: 10px 12px; }
+    .key-box code { flex: 1; font-size: 0.78rem; word-break: break-all; color: #c4b5fd; }
+    .field label { display: block; font-size: 0.78rem; color: var(--muted); margin: 0 0 5px; font-weight: 600; }
+    .field input { width: 100%; background: var(--bg); border: 1px solid var(--border); color: var(--text);
+      border-radius: 12px; padding: 12px 14px; font-size: 0.95rem; outline: none; margin-bottom: 12px; }
+    .field input:focus { border-color: #7c6cff; }
+    .premium-badge { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 999px;
+      background: rgba(255,213,74,0.12); border: 1px solid rgba(255,213,74,0.35); color: #ffd54a;
+      font-weight: 700; font-size: 0.8rem; }
+    .wa-bottom { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; padding: 10px 16px calc(env(safe-area-inset-bottom) + 10px);
+      background: rgba(5,6,15,0.9); backdrop-filter: blur(14px); border-top: 1px solid var(--border); }
+  </style>
+</head>
+<body>
+  <div class="wa-top">
+    <div class="wa-logo"><img src="/static/img/logo.png" alt="" onerror="this.style.display='none'" /></div>
+    <div>
+      <h1>Inomjon AI</h1>
+      <small id="userSub">Telegram orqali kirmoqda...</small>
+    </div>
+    <div style="margin-left:auto" id="premiumBadge"></div>
+  </div>
+
+  <div class="wa-tabs">
+    <button class="wa-tab active" data-tab="premium">👑 Premium</button>
+    <button class="wa-tab" data-tab="profile">👤 Profil</button>
+    <button class="wa-tab" data-tab="keys">🔑 API kalit</button>
+  </div>
+
+  <div class="wa-body">
+    <div id="waStatus" class="wa-status"></div>
+
+    <section id="tab-premium">
+      <div class="wa-card">
+        <h3>👑 Premium rejalar</h3>
+        <p class="wa-note" style="margin-top:0">To'lov bitta usulda — Telegram Stars. Premium barcha platformalarda (bot, sayt, ilova, CLI) ishlaydi.</p>
+        <div class="plan-grid" id="planGrid">
+          <div class="plan" data-plan="1m"><div><b>1 oy</b><br /><span>Har kuni 30 kun</span></div><div class="price">150 ⭐</div></div>
+          <div class="plan" data-plan="3m"><div><b>3 oy</b><br /><span>O'yiga 133 ⭐ (arzon)</span></div><div class="price">400 ⭐</div></div>
+          <div class="plan" data-plan="12m"><div><b>12 oy</b><br /><span>O'yiga 117 ⭐ (eng qulay)</span></div><div class="price">1400 ⭐</div></div>
+        </div>
+      </div>
+      <button class="wa-btn" id="payBtn">⭐ To'lovni boshlash</button>
+      <p class="wa-note">To'lov tugmasi bosilganda Telegram to'lov oynasi ochiladi. To'lov tugagach premium avtomatik yoqiladi.</p>
+    </section>
+
+    <section id="tab-profile" style="display:none">
+      <div class="wa-card">
+        <h3>📊 Statistikangiz</h3>
+        <div class="stat-grid" id="statsGrid">
+          <div class="stat-cell"><b>–</b><span>Xabarlar</span></div>
+          <div class="stat-cell"><b>–</b><span>Suhbatlar</span></div>
+          <div class="stat-cell"><b>–</b><span>Baholangan</span></div>
+        </div>
+        <div id="statsDetail" style="font-size:0.82rem;color:var(--muted)"></div>
+      </div>
+      <div class="wa-card">
+        <h3>👤 Ma'lumotlar</h3>
+        <div class="field"><label>Telegram</label><input id="tgName" type="text" disabled /></div>
+        <div class="field"><label>Ism</label><input id="pName" type="text" placeholder="Ismingiz" maxlength="40" /></div>
+        <div class="field"><label>Telefon</label><input id="pPhone" type="tel" placeholder="+998 90 123 45 67" maxlength="30" /></div>
+        <button class="wa-btn" id="saveBtn">💾 Saqlash</button>
+      </div>
+      <div class="wa-card">
+        <h3>🔐 Hisob</h3>
+        <p class="wa-note" style="margin-top:0" id="accInfo">Hisobingiz Telegram bilan bog'langan. Sayt/ilova/CLI'da kirish uchun username+parol o'rnatishingiz mumkin.</p>
+        <div class="field"><label>Username (sayt uchun)</label><input id="pUsername" type="text" placeholder="username" maxlength="30" /></div>
+        <div class="field"><label>Parol (sayt uchun)</label><input id="pPassword" type="password" placeholder="Kamida 4 belgi" /></div>
+        <button class="wa-btn ghost" id="setCredBtn">🔑 Username + parol o'rnatish</button>
+        <p class="wa-note">Bu username/parol bilan sayt (neuraai.up.railway.app) va ilovada ham kira olasiz.</p>
+      </div>
+    </section>
+
+    <section id="tab-keys" style="display:none">
+      <div class="wa-card">
+        <h3>🔑 API kalit</h3>
+        <p class="wa-note" style="margin-top:0">API kalit CLI yoki tashqi dasturlardan foydalanish uchun (so'rovda <code>Authorization: Bearer &lt;kalit&gt;</code>).</p>
+        <div id="keyBox"></div>
+        <button class="wa-btn" id="keyCreateBtn" style="margin-top:12px">🆕 API kalit yaratish</button>
+      </div>
+    </section>
+  </div>
+
+  <div class="wa-bottom">
+    <button class="wa-btn ghost" id="logoutBtn" style="padding:11px">🚪 Chiqish</button>
+  </div>
+
+  <script>
+    const tg = window.Telegram?.WebApp;
+    if (tg) { tg.ready(); tg.expand(); tg.setHeaderColor("#05060f"); tg.setBackgroundColor("#05060f"); }
+
+    let TOKEN = "", USER = {};
+    const $ = (id) => document.getElementById(id);
+    const status = (msg, err) => {
+      const el = $("waStatus");
+      el.textContent = msg; el.className = "wa-status" + (err ? " err" : "");
+      el.style.display = "block";
+      if (err) { setTimeout(() => { el.style.display = "none"; }, 6000); }
+    };
+
+    async function apiFetch(path, opts) {
+      const res = await fetch(path, Object.assign({ headers: { "Content-Type": "application/json" } }, opts));
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Xatolik");
+      return data;
+    }
+
+    async function init() {
+      if (!tg) { status("Telegram ichida ochilmadi. Botdan /webapp buyrug'i orqali oching.", true); return; }
+      const initData = tg.initData;
+      if (!initData) { status("Avtorizatsiya ma'lumoti topilmadi.", true); return; }
+      try {
+        const r = await apiFetch("/api/tg-login", { method: "POST", body: JSON.stringify({ initData }) });
+        TOKEN = r.token;
+        USER = r.user || {};
+        $("userSub").textContent = "@" + (USER.username || "foydalanuvchi");
+        localStorage.setItem("neura_token", TOKEN);
+        await loadProfile();
+        await loadStats();
+        await loadKey();
+        bindTabs();
+      } catch (e) { status(e.message, true); }
+    }
+
+    async function loadProfile() {
+      try {
+        const u = await apiFetch("/api/me?token=" + encodeURIComponent(TOKEN));
+        USER = Object.assign(USER, u);
+        $("pName").value = u.name || "";
+        $("pPhone").value = u.phone || "";
+        $("tgName").value = "@" + (u.username || "") + (u.telegram_id ? " (bog'langan ✓)" : "");
+        $("pUsername").value = (u.username || "").replace(/^@/, "");
+        const badge = $("premiumBadge");
+        if (u.premium) {
+          badge.innerHTML = '<span class="premium-badge">👑 ' + (u.premium_until || "").slice(0, 10) + "</span>";
+        } else { badge.innerHTML = ""; }
+        $("accInfo").textContent = "Hisobingiz Telegram bilan bog'langan. Sayt/ilova/CLI'da kirish uchun username+parol o'rnatishingiz mumkin." +
+          (u.email ? " Email: " + u.email : "");
+      } catch (e) {}
+    }
+
+    async function loadStats() {
+      try {
+        const st = await apiFetch("/api/stats?token=" + encodeURIComponent(TOKEN));
+        document.querySelector("#statsGrid .stat-cell:nth-child(1) b").textContent = st.messages;
+        document.querySelector("#statsGrid .stat-cell:nth-child(2) b").textContent = st.conversations;
+        document.querySelector("#statsGrid .stat-cell:nth-child(3) b").textContent = st.rated;
+        const srcLabels = { intent: "Tezkor", code: "Kod", knowledge: "Bilim", websearch: "Internet", llm: "AI", fallback: "Zaxira", generation: "Generatsiya", vision: "Rasm" };
+        const rows = (st.by_source || []).map((s) => {
+          const label = srcLabels[s.source] || s.source;
+          const max = Math.max(1, ...(st.by_source || []).map((x) => x.n));
+          return '<div style="display:flex;justify-content:space-between;gap:10px;padding:4px 0;border-bottom:1px solid var(--border)">' +
+            "<span>" + label + "</span><b>" + s.n + "</b></div>";
+        });
+        $("statsDetail").innerHTML = rows.length ? rows.join("") : "Ma'lumot yo'q";
+      } catch (e) {}
+    }
+
+    async function loadKey() {
+      try {
+        const k = await apiFetch("/api/key?token=" + encodeURIComponent(TOKEN));
+        if (k.key) {
+          $("keyBox").innerHTML = '<div class="key-box"><code>' + k.key + '</code></div><p class="wa-note">Nom: ' + k.name + "</p>";
+          $("keyCreateBtn").textContent = "🗑 Kalitni o'chirish";
+          $("keyCreateBtn").dataset.delete = "1";
+        } else {
+          $("keyBox").innerHTML = '<p class="wa-note" style="margin-top:0">Kalit yo\'q — yaratishingiz mumkin.</p>';
+          $("keyCreateBtn").textContent = "🆕 API kalit yaratish";
+          delete $("keyCreateBtn").dataset.delete;
+        }
+      } catch (e) {}
+    }
+
+    function bindTabs() {
+      document.querySelectorAll(".wa-tab").forEach((t) => {
+        t.onclick = () => {
+          document.querySelectorAll(".wa-tab").forEach((x) => x.classList.remove("active"));
+          t.classList.add("active");
+          document.querySelectorAll(".wa-body section").forEach((s) => (s.style.display = "none"));
+          $("tab-" + t.dataset.tab).style.display = "block";
+        };
+      });
+    }
+
+    let selectedPlan = "1m";
+    document.querySelectorAll(".plan").forEach((p) => {
+      if (p.dataset.plan === selectedPlan) p.classList.add("selected");
+      p.onclick = () => {
+        document.querySelectorAll(".plan").forEach((x) => x.classList.remove("selected"));
+        p.classList.add("selected");
+        selectedPlan = p.dataset.plan;
+      };
+    });
+
+    $("payBtn").onclick = async () => {
+      const btn = $("payBtn");
+      btn.disabled = true;
+      btn.textContent = "⏳ Invoice yaratilmoqda...";
+      try {
+        const r = await apiFetch("/api/tg/invoice", {
+          method: "POST",
+          body: JSON.stringify({ token: TOKEN, plan: selectedPlan, initData: tg.initData })
+        });
+        if (!tg.openInvoice) throw new Error("Bu versiyada to'lov oynasi yo'q");
+        tg.openInvoice(r.invoice_url, async (res) => {
+          if (res === "paid") { status("✅ To'lov muvaffaqiyatli! Premium yoqildi."); await loadProfile(); }
+          else if (res === "failed") status("❌ To'lov bekor qilindi.", true);
+        });
+      } catch (e) { status(e.message, true); }
+      btn.disabled = false;
+      btn.textContent = "⭐ To'lovni boshlash";
+    };
+
+    $("saveBtn").onclick = async () => {
+      try {
+        await apiFetch("/api/profile", {
+          method: "POST",
+          body: JSON.stringify({ token: TOKEN, name: $("pName").value, phone: $("pPhone").value })
+        });
+        status("✅ Profil saqlandi");
+        await loadProfile();
+      } catch (e) { status(e.message, true); }
+    };
+
+    $("setCredBtn").onclick = async () => {
+      const uname = $("pUsername").value.trim().replace(/^@/, "");
+      const pass = $("pPassword").value;
+      if (!uname || pass.length < 4) { status("Username va kamida 4 belgili parol kiriting.", true); return; }
+      try {
+        await apiFetch("/api/me/set-credentials", {
+          method: "POST",
+          body: JSON.stringify({ token: TOKEN, username: uname, password: pass })
+        });
+        status("✅ Username va parol o'rnatildi! Endi saytda ham kira olasiz.");
+        $("pPassword").value = "";
+      } catch (e) { status(e.message, true); }
+    };
+
+    $("keyCreateBtn").onclick = async () => {
+      const btn = $("keyCreateBtn");
+      try {
+        if (btn.dataset.delete) {
+          await apiFetch("/api/key?token=" + encodeURIComponent(TOKEN), { method: "DELETE" });
+        } else {
+          await apiFetch("/api/key/create", {
+            method: "POST",
+            body: JSON.stringify({ token: TOKEN, name: "WebApp kalit", models: ["*"] })
+          });
+          status("✅ Kalit yaratildi");
+        }
+        await loadKey();
+      } catch (e) { status(e.message, true); }
+    };
+
+    $("logoutBtn").onclick = () => {
+      apiFetch("/api/logout?token=" + encodeURIComponent(TOKEN)).catch(() => {});
+      localStorage.removeItem("neura_token");
+      if (tg) tg.close();
+    };
+
+    init();
+  </script>
+</body>
+</html>

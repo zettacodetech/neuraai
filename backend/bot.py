@@ -7,6 +7,7 @@ Ishga tushirish:
 """
 
 import asyncio
+import json
 import logging
 import os
 import tempfile
@@ -99,6 +100,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                     url="https://github.com/zettacodetech/neuraai/releases/latest/download/neuraai.apk",
                 ),
             ],
+            [
+                InlineKeyboardButton(
+                    "🌐 Web ilova",
+                    web_app={"url": "https://neuraai.up.railway.app/webapp"},
+                )
+            ],
             [InlineKeyboardButton("🆕 Suhbatni yangilash", callback_data="menu:new")],
         ]
     )
@@ -125,9 +132,32 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "• 📈 Suhbatlardan o'rganish\n\n"
         "Buyruqlar:\n"
         "/new — yangi suhbat boshlash\n"
+        "/webapp — 🌐 Web ilova (premium, profil, API kalit)\n"
         "/help — ushbu yordam\n\n"
         "Javoblar 👍/👎 orqali meni o'rgatasiz!",
         parse_mode="HTML",
+    )
+
+
+async def webapp_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    kb = InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(
+                    "🌐 Web ilovani ochish",
+                    web_app={"url": "https://neuraai.up.railway.app/webapp"},
+                )
+            ]
+        ]
+    )
+    await update.message.reply_text(
+        "🌐 <b>Inomjon AI Web ilova</b>\n\n"
+        "• 👑 Premium sotib olish (Stars)\n"
+        "• 👤 Profil va statistika\n"
+        "• 🔑 API kalitlar\n\n"
+        "Quyidagi tugmani bosing — ilova ichida ochiladi 👇",
+        parse_mode="HTML",
+        reply_markup=kb,
     )
 
 
@@ -407,13 +437,25 @@ async def successful_payment(
 ) -> None:
     payment = update.message.successful_payment
     payload = payment.invoice_payload or ""
-    plan_key = payload.split(":", 1)[1] if payload.startswith("premium:") else ""
+    plan_key = ""
+    paid_tg_id = update.effective_user.id if update.effective_user else None
+    if payload.startswith("premium:"):
+        plan_key = payload.split(":", 1)[1]
+    else:
+        # WebApp (createInvoiceLink) dan kelgan JSON payload
+        try:
+            data = json.loads(payload)
+            plan_key = str(data.get("premium") or "")
+            if data.get("tg_id"):
+                paid_tg_id = int(data["tg_id"])
+        except Exception:
+            pass
     plan = PLANS.get(plan_key)
     if not plan:
         await update.message.reply_text("To'lov qabul qilindi, lekin reja tanlanmadi.")
         return
     db = get_db()
-    user_id = db.get_or_create_user(telegram_id=update.effective_user.id)
+    user_id = db.get_or_create_user(telegram_id=paid_tg_id)
     until = db.add_premium_days(user_id, plan["days"])
     db.add_payment(
         user_id,
@@ -586,6 +628,7 @@ def _build_app() -> Application:
     app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_cmd))
+    app.add_handler(CommandHandler("webapp", webapp_cmd))
     app.add_handler(CommandHandler("new", new_chat))
     app.add_handler(CommandHandler("premium", premium_cmd))
     app.add_handler(CommandHandler("pay", premium_cmd))

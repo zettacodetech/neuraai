@@ -6,6 +6,7 @@ import threading
 import time
 import json
 import urllib.request
+import urllib.parse
 import hashlib
 import hmac
 import secrets
@@ -173,6 +174,11 @@ def register_page() -> FileResponse:
 @app.get("/profile")
 def profile_page() -> FileResponse:
     return FileResponse(os.path.join(FRONTEND, "profile.html"))
+
+
+@app.get("/webapp")
+def webapp_page() -> FileResponse:
+    return FileResponse(os.path.join(FRONTEND, "webapp.html"))
 
 
 @app.get("/api-key")
@@ -1044,7 +1050,6 @@ async def upload_doc(file: UploadFile = File(...)) -> JSONResponse:
 
 def groq_stt(audio_bytes: bytes, filename: str) -> str:
     import json
-    import urllib.request
 
     key = os.environ.get("GROQ_API_KEY")
     if not key:
@@ -1521,7 +1526,11 @@ async def tg_login(req: Request) -> JSONResponse:
         {
             "success": True,
             "token": token,
-            "user": {"name": user["name"], "tg_id": user["tg_id"]},
+            "user": {
+                "name": user["name"],
+                "username": user.get("username") or "",
+                "tg_id": user.get("telegram_id"),
+            },
         }
     )
 
@@ -1553,6 +1562,109 @@ async def tg_bind(req: Request) -> JSONResponse:
         )
     db.bind_telegram(user["id"], tg_id)
     return JSONResponse({"success": True, "tg_id": int(tg_id)})
+
+
+class SetCredentialsRequest(BaseModel):
+    token: str
+    username: str
+    password: str
+
+
+@app.post("/api/me/set-credentials")
+async def set_credentials(req: SetCredentialsRequest) -> JSONResponse:
+    """WebApp ichida username+parol o'rnatish — sayt/ilova/CLI'da kirish uchun."""
+    db = get_db()
+    user = db.get_user_by_token(req.token)
+    if not user:
+        return JSONResponse({"error": "Avval tizimga kiring"}, status_code=401)
+    username = req.username.strip().lower().replace("@", "")[:30]
+    if not re.match(r"^[a-z0-9_]+$", username):
+        return JSONResponse(
+            {"error": "Username faqat harflar, raqamlar va _ dan iborat bo'lsin"},
+            status_code=400,
+        )
+    if len(req.password) < 4:
+        return JSONResponse({"error": "Parol kamida 4 belgi"}, status_code=400)
+    taken = db.get_user_by_username(username)
+    if taken and taken["id"] != user["id"]:
+        return JSONResponse({"error": "Bu username band"}, status_code=409)
+    db._execute(
+        "UPDATE users SET username = ?, password_hash = ? WHERE id = ?",
+        (username, hash_password(req.password), user["id"]),
+    )
+    return JSONResponse({"success": True, "username": username})
+
+
+# ================= Telegram WebApp Stars to'lov =================
+
+
+_TG_STAR_PLANS = {
+    "1m": {"title": "Premium 1 oy", "stars": 150, "days": 30},
+    "3m": {"title": "Premium 3 oy", "stars": 400, "days": 90},
+    "12m": {"title": "Premium 12 oy", "stars": 1400, "days": 365},
+}
+
+
+@app.post("/api/tg/invoice")
+async def tg_invoice(req: Request) -> JSONResponse:
+    """WebApp ichida Stars to'lovi — createInvoiceLink yaratadi."""
+    body = await req.json()
+    token = (body.get("token") or "").strip()
+    plan_key = (body.get("plan") or "").strip()
+    init_data = (body.get("initData") or "").strip()
+
+    if not token or not plan_key or not init_data:
+        return JSONResponse({"error": "token, plan va initData kerak"}, status_code=400)
+    tg_user = validate_tg_init_data(init_data)
+    if not tg_user:
+        return JSONResponse(
+            {"error": "Telegram ma'lumotlari tasdiqlanmadi"}, status_code=401
+        )
+    db = get_db()
+    user = db.get_user_by_token(token)
+    if not user:
+        return JSONResponse({"error": "Avval tizimga kiring"}, status_code=401)
+    tg_id = str(tg_user.get("id"))
+    tg_owner = db.get_user_by_telegram(tg_id)
+    if not tg_owner or tg_owner["id"] != user["id"]:
+        return JSONResponse(
+            {"error": "Bu hisob sizning Telegram akkauntingizga bog'lanmagan"},
+            status_code=403,
+        )
+
+    plan = _TG_STAR_PLANS.get(plan_key)
+    if not plan:
+        return JSONResponse({"error": "Noma'lum reja"}, status_code=400)
+
+    bot_token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+    if not bot_token:
+        return JSONResponse({"error": "Bot token topilmadi"}, status_code=500)
+    payload = json.dumps(
+        {"premium": plan_key, "tg_id": int(tg_id)}, separators=(",", ":")
+    )
+    query = "&".join(
+        [
+            f"title={urllib.parse.quote(plan['title'])}",
+            "description="
+            + urllib.parse.quote("Inomjon AI Premium — Telegram Stars orqali"),
+            f"payload={payload}",
+            "provider_token=",
+            "currency=XTR",
+            f"prices={urllib.parse.quote(json.dumps([{'label': 'Premium', 'amount': plan['stars']}]))}",
+        ]
+    )
+    url = f"https://api.telegram.org/bot{bot_token}/createInvoiceLink?{query}"
+    try:
+        with urllib.request.urlopen(url, timeout=20) as resp:
+            data = json.loads(resp.read())
+        if not data.get("ok"):
+            return JSONResponse(
+                {"error": data.get("description", "Invoice yaratilmadi")},
+                status_code=400,
+            )
+        return JSONResponse({"success": True, "invoice_url": data["result"]})
+    except Exception as e:
+        return JSONResponse({"error": f"Invoice xatosi: {e}"}, status_code=500)
 
 
 @app.post("/api/tg-unbind")
