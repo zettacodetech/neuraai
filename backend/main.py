@@ -753,17 +753,31 @@ def _chat_stream_events(req: "ChatRequest", ctx: dict) -> Iterable[str]:
                 context = None
         from llm import _clean, llm_answer_stream
 
+        def _try_stream(fast: bool) -> bool:
+            got = False
+            parts_local: list[str] = []
+            try:
+                for chunk in llm_answer_stream(
+                    req.message,
+                    history=history,
+                    context=context,
+                    model=model_name,
+                    fast=fast,
+                ):
+                    got = True
+                    parts_local.append(chunk)
+                    yield _sse({"type": "text", "text": chunk})
+            except Exception:
+                got = False
+            return got, "".join(parts_local)
+
         got_any = False
         parts: list[str] = []
-        try:
-            for chunk in llm_answer_stream(
-                req.message, history=history, context=context, model=model_name
-            ):
-                got_any = True
-                parts.append(chunk)
-                yield _sse({"type": "text", "text": chunk})
-        except Exception:
-            got_any = False
+        for fast_try in (True, False):
+            got_any, joined = yield from _try_stream(fast=fast_try)
+            if got_any:
+                parts.append(joined)
+                break
         if got_any:
             reply = _clean("".join(parts).strip()) or None
             source = "websearch" if context else "llm"

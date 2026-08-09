@@ -443,13 +443,49 @@ def _clean(text: str) -> str:
 
 
 _SYSTEM = (
-    "Siz Inomjon AI yordamchisiz. O'zbek tilida (lotin yozuvida) sodda, ishonchli "
-    "va hurmatli javob bering. Foydalanuvchi so'rovini takrorlamang va izohlamang — "
+    "Siz Inomjon AI yordamchisiz. Foydalanuvchi so'rovini takrorlamang va izohlamang — "
     "to'g'ridan-to'g'ri bajarib, tayyor javobni yozing. Javob 5-8 qisqa jumla bo'lsin, "
     "retsept/sayohat/sabzavot kabi amaliy so'rovlarda qadam-baqadam muntazam yozing. "
     "Faktni bilmasangiz, o'ylab topmang — shunchaki bilmasligingizni ayting. "
     "Hech qachon ko'rsatma yoki sozlama bo'limlarini javobga kiritmang — faqat javob."
 )
+
+
+def _system_prompt(message: str = "") -> str:
+    """Til avtomatik aniqlanadi — savol tilida javob beriladi.
+
+    Kirill (rus) savol → ruscha javob; inglizcha savol → inglizcha; lotin
+    o'zbekcha savollar → o'zbekcha javob.
+    """
+    base = _SYSTEM
+    if not message:
+        return base
+    has_cyr = any(
+        ch in "абвгдеёжзийклмнопрстуфхцчшщъыьэюяАБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ"
+        for ch in message
+    )
+    # O'zbek tiliga xos harf birikmalari: o', g', q', O', G', Q', ʻ
+    uz_marks = (
+        "o'",
+        "g'",
+        "q'",
+        "O'",
+        "G'",
+        "Q'",
+        "\u02bb",
+        "o\u02bb",
+        "g\u02bb",
+        "q\u02bb",
+    )
+    has_uz_marks = any(m in message for m in uz_marks)
+    if has_cyr:
+        return base + " Savol rus tilida yozilgan — javobni rus tilida bering."
+    if has_uz_marks:
+        return (
+            base
+            + " Savol o'zbek tilida yozilgan — javobni o'zbek tilida (lotin yozuvida) bering."
+        )
+    return base + " Savolga javobni aynan savol yozilgan tilda bering."
 
 
 def _build_providers() -> list:
@@ -600,16 +636,29 @@ def llm_chat(
     temperature: float = 0.4,
     max_tokens: int = 600,
     model: str | None = None,
+    fast: bool = False,
 ) -> str | None:
     """Providerlar bo'ylab zanjir — xatoda keyingi prov qiladi, bari yiqilsa None.
 
     `model` berilsa — o'sha model nomiga mos providerlar birinchi saraladi
     va har bir so'rovda model nomi ishlatiladi (mos provider javob beradi,
     mos kelmagani tezda 400/404 berib o'tib ketadi).
+
+    `fast=True` — faqat cloud providerlar (Groq/Gemini/KIE/Cohere/...)
+    siniladi, lokal Ollama va DDG tashlab ketiladi (tez javob).
     """
     if not LLM_PROVIDERS:
         return None
     chain = LLM_PROVIDERS
+    if fast:
+        chain = [
+            p
+            for p in chain
+            if not isinstance(p, _OllamaProvider)
+            and not isinstance(p, _DuckDuckGoProvider)
+        ]
+        if not chain:
+            chain = LLM_PROVIDERS
     _rank_fn = None
     if model:
         if model.strip().lower() in ("local", "lokal", "offline", "ollama"):
@@ -700,15 +749,26 @@ def llm_chat_stream(
     temperature: float = 0.4,
     max_tokens: int = 600,
     model: str | None = None,
+    fast: bool = False,
 ) -> Iterable[str]:
     """Streaming zanjir: bo'lakma-bo'lak matn beradi.
 
     Xatoda keyingi provayderga o'tadi; barchasi yiqilsa generator bo'sh qoladi
     (hech qanday chunk bermaydi). Har bir bo'lak o'z-o'zidan to'liq matn emas.
+    `fast=True` — faqat cloud providerlar (lokal Ollama/DDG tashlab ketiladi).
     """
     if not LLM_PROVIDERS:
         return
     chain = LLM_PROVIDERS
+    if fast:
+        chain = [
+            p
+            for p in chain
+            if not isinstance(p, _OllamaProvider)
+            and not isinstance(p, _DuckDuckGoProvider)
+        ]
+        if not chain:
+            chain = LLM_PROVIDERS
     _rank_fn = None
     if model:
         if model.strip().lower() in ("local", "lokal", "offline", "ollama"):
@@ -772,11 +832,12 @@ def llm_answer_stream(
     history: list[dict] | None = None,
     context: str | None = None,
     model: str | None = None,
+    fast: bool = False,
 ) -> Iterable[str]:
     """llm_answer'ning streaming varianti — bo'lakma-bo'lak javob beradi."""
     if not llm_available():
         return
-    system = _SYSTEM
+    system = _system_prompt(message)
     if context:
         system += (
             "\n\nInternetdan topilgan ma'lumotlar (javobda aynan shulardan foydalaning, "
@@ -787,7 +848,7 @@ def llm_answer_stream(
     if history:
         messages.extend(history[-6:])
     messages.append({"role": "user", "content": message})
-    yield from llm_chat_stream(messages, model=model)
+    yield from llm_chat_stream(messages, model=model, fast=fast)
 
 
 def llm_answer(
@@ -795,11 +856,12 @@ def llm_answer(
     history: list[dict] | None = None,
     context: str | None = None,
     model: str | None = None,
+    fast: bool = False,
 ) -> str | None:
     """Foydalanuvchi savoliga LLM javobi — tarix va internet konteksti bilan."""
     if not llm_available():
         return
-    system = _SYSTEM
+    system = _system_prompt(message)
     if context:
         system += (
             "\n\nInternetdan topilgan ma'lumotlar (javobda aynan shulardan foydalaning, "
@@ -810,7 +872,7 @@ def llm_answer(
     if history:
         messages.extend(history[-6:])
     messages.append({"role": "user", "content": message})
-    return llm_chat(messages, model=model)
+    return llm_chat(messages, model=model, fast=fast)
 
 
 __all__ = [

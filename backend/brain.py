@@ -287,16 +287,32 @@ class Brain:
             web_answer, context = self._web_search(message)
             if context:
                 llm_reply = self._llm(
-                    message, context=context, history=history, model=model
+                    message, context=context, history=history, model=model, fast=True
                 )
                 if llm_reply:
                     return llm_reply, "llm"
             if web_answer:
                 return web_answer, "websearch"
 
-        llm_reply = self._llm(message, history=history, model=model)
+        # Birinchi urinish: tez cloud AI (Groq/Gemini/Cohere/KIE...)
+        llm_reply = self._llm(message, history=history, model=model, fast=True)
         if llm_reply:
             return llm_reply, "llm"
+
+        # Ikkinchi urinish: lokal Ollama klaster + DDG (bepul, keyin sinanadi)
+        llm_reply = self._llm(message, history=history, model=model, fast=False)
+        if llm_reply:
+            return llm_reply, "llm"
+
+        # Yana web qidiruvga urinamiz (qisqa savollar uchun)
+        if os.environ.get("ENABLE_WEB_SEARCH", "1") == "1":
+            try:
+                web_answer, _ = self._web_search(message)
+                if web_answer:
+                    return web_answer, "websearch"
+            except Exception:
+                pass
+
         return self._fallback(message), "fallback"
 
     def _web_search(self, message: str) -> tuple[str, str]:
@@ -325,12 +341,15 @@ class Brain:
         context: str | None = None,
         history: list[dict] | None = None,
         model: str | None = None,
+        fast: bool = False,
     ) -> str | None:
         try:
             from llm import llm_answer
         except ImportError:
             return None
-        return llm_answer(message, history=history, context=context, model=model)
+        return llm_answer(
+            message, history=history, context=context, model=model, fast=fast
+        )
 
     def _retrieve(
         self, q_tokens: list[str], knowledge: list[dict]
