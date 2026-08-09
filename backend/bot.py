@@ -10,6 +10,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import tempfile
 import threading
 
@@ -149,8 +150,64 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "Buyruqlar:\n"
         "/new — yangi suhbat boshlash\n"
         "/webapp — 🌐 Web ilova (premium, profil, API kalit)\n"
+        "/ibrat — 💫 Bugungi ibratli so'z\n"
+        "/yangilik — 📰 Bugungi yangiliklar (Internetdan)\n"
+        "/til — 🌐 Til tanlash (UZ/RU/EN)\n"
         "/help — ushbu yordam\n\n"
         "Javoblar 👍/👎 orqali meni o'rgatasiz!",
+        parse_mode="HTML",
+    )
+
+
+async def ibrat_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Bugungi ibratli so'zni yuboradi."""
+    await update.message.reply_text("💫 Ibrat izlanmoqda...")
+    try:
+        from llm import llm_chat
+
+        soz = llm_chat(
+            [
+                {
+                    "role": "system",
+                    "content": (
+                        "Sen motivatsion notiqsan. Bugungi ibratli so'zni o'zbek "
+                        "tilida yoz: qisqa hikoya yoki hayotiy o'git + oxirida "
+                        "bitta aniq maslahat. 4-6 qatordan oshmasin."
+                    ),
+                },
+                {"role": "user", "content": "Bugungi ibratli so'zni yubor"},
+            ],
+            fast=True,
+        )
+    except Exception:
+        soz = ""
+    if not soz:
+        soz = (
+            "💫 <b>Bugungi ibrat:</b>\n\n"
+            "Kichik qadamlar ham buyuk yo'lni boshlaydi. Bugun bitta "
+            "ishni oxiriga yetkaz — ertaga ikkita bo'ladi."
+        )
+    await update.message.reply_text(soz, parse_mode="HTML")
+
+
+async def yangilik_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Bugungi yangiliklar — internetdan qidirib, ixcham xulosa beradi."""
+    await update.message.reply_text("📰 Yangiliklar izlanmoqda...")
+    try:
+        from websearch import search_answer
+
+        summary = search_answer(
+            "bugungi eng muhim jahon va O'zbekiston yangiliklari", 4
+        )
+    except Exception:
+        summary = ""
+    if not summary:
+        await update.message.reply_text(
+            "📰 Yangiliklarni topa olmadim, keyinroq urinib ko'ring."
+        )
+        return
+    await update.message.reply_text(
+        f"📰 <b>Bugungi yangiliklar:</b>\n\n{summary[:2500]}",
         parse_mode="HTML",
     )
 
@@ -524,7 +581,177 @@ async def successful_payment(
     )
 
 
+async def on_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Ovozli xabarni matnga aylantirib (Whisper) AI javob beradi."""
+    tg_id = update.effective_user.id
+    db0 = get_db()
+    uid0 = db0.get_or_create_user(telegram_id=tg_id)
+    await update.message.reply_text(_t(uid0, "voice_working"))
+    try:
+        file = await update.message.voice.get_file()
+        raw = await file.download_as_bytearray()
+        path = tempfile.mktemp(suffix=".ogg")
+        with open(path, "wb") as f:
+            f.write(raw)
+        try:
+            text = _transcribe(path)
+        finally:
+            os.unlink(path)
+    except Exception as e:
+        await update.message.reply_text(f"Ovozni yuklab ololmadim: {e}")
+        return
+
+    if not text:
+        await update.message.reply_text(_t(uid0, "voice_fail"))
+        return
+
+    await update.message.reply_text(
+        _t(uid0, "voice_said", text=text), parse_mode="HTML"
+    )
+    await _answer_message(update, context, text, source_note="🎤")
+
+
+def _transcribe(path: str, timeout: float = 60.0) -> str:
+    """Ovozli faylni matnga aylantiradi (Groq Whisper, fallback: lokal)."""
+    import urllib.error
+    import urllib.request
+
+    api_key = (
+        os.environ.get("GROQ_API_KEY", "").strip()
+        or os.environ.get("NEURA_LLM_API_KEY", "").strip()
+    )
+    if api_key:
+        boundary = "----neuraboundary"
+        import uuid
+
+        bnd = uuid.uuid4().hex
+        with open(path, "rb") as f:
+            audio = f.read()
+        body = (
+            f"--{bnd}\r\n"
+            'Content-Disposition: form-data; name="file"; filename="voice.ogg"\r\n'
+            "Content-Type: audio/ogg\r\n\r\n"
+        ).encode()
+        body += audio
+        body += (
+            f"\r\n--{bnd}\r\n"
+            'Content-Disposition: form-data; name="model"\r\n\r\n'
+            "whisper-large-v3\r\n"
+            f"--{bnd}--\r\n"
+        ).encode()
+        try:
+            req = urllib.request.Request(
+                "https://api.groq.com/openai/v1/audio/transcriptions",
+                data=body,
+                method="POST",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": f"multipart/form-data; boundary={bnd}",
+                },
+            )
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                data = json.loads(r.read().decode("utf-8"))
+            return str(data.get("text", "")).strip()
+        except Exception as exc:
+            logging.warning("Groq STT xato: %s", exc)
+    try:
+        import whisper_local  # noqa
+
+        return whisper_local.transcribe(path)
+    except Exception:
+        return ""
+
+
+async def _answer_message(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    text: str,
+    source_note: str = "",
+    voice_mode: bool = False,
+) -> None:
+    """Umumiy javob berish (matn / ovoz / guruh uchun)."""
+    tg_id = update.effective_user.id
+    db = get_db()
+    user_id = db.get_or_create_user(telegram_id=tg_id)
+
+    plan = db.get_premium_plan(user_id)
+    if not db.is_premium(user_id):
+        plan = "free"
+    limit = {"free": 20, "go": 100, "pro": 500}.get(plan, 0)
+    if limit > 0:
+        used = db.daily_usage(user_id)
+        if used >= limit:
+            await update.message.reply_text(
+                _t(user_id, "limit", used=used, limit=limit, plan=plan),
+                parse_mode="HTML",
+            )
+            return
+
+    conv_id = current_conv.get(tg_id)
+    if conv_id is not None:
+        conv = db.get_conversation(conv_id)
+        if not conv or conv["user_id"] != user_id:
+            conv_id = None
+    if conv_id is None:
+        convs = db.list_conversations(user_id)
+        conv_id = convs[0]["id"] if convs else db.create_conversation(user_id, text)
+
+    db.add_message(user_id, "user", text, conversation_id=conv_id)
+    reply, source = brain.answer(text, db.get_knowledge())
+    msg_id = db.add_message(
+        user_id, "assistant", reply, source=source, conversation_id=conv_id
+    )
+    if source == "fallback":
+        db.add_unanswered(text, user_id)
+    try:
+        db.bump_daily_usage(user_id)
+    except Exception:
+        pass
+
+    kb = InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton("👍", callback_data=f"rate:{msg_id}:1"),
+                InlineKeyboardButton("👎", callback_data=f"rate:{msg_id}:-1"),
+            ]
+        ]
+    )
+    if voice_mode:
+        try:
+            await update.message.reply_text("🗣 Ovoz tayyorlanmoqda...")
+            import pollinations
+
+            data, err = None, "no-voice"
+            try:
+                import elevenlabs
+
+                if elevenlabs.available():
+                    data, err = elevenlabs.generate_voice(reply)
+            except Exception:
+                pass
+            if not data and pollinations.available():
+                data, err = pollinations.generate_audio(reply)
+            if data:
+                with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
+                    f.write(data)
+                    tmp = f.name
+                try:
+                    with open(tmp, "rb") as f:
+                        await update.message.reply_voice(f)
+                finally:
+                    os.unlink(tmp)
+                await update.message.reply_text(reply)
+            else:
+                await update.message.reply_text(reply)
+        except Exception as e:
+            logging.warning("Ovoz yuborilolmadi (%s); matn yuborildi", e)
+            await update.message.reply_text(reply, reply_markup=kb)
+        return
+    await update.message.reply_text(reply, reply_markup=kb)
+
+
 async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Matnli xabarga javob berish (rasm/video/ovoz buyruqlari ham shu yerda)."""
     tg_id = update.effective_user.id
     text = update.message.text.strip()
     if not text:
@@ -558,93 +785,124 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             await update.message.reply_text(f"Video yarata olmadim: {e}")
         return
 
-    db = get_db()
-    user_id = db.get_or_create_user(telegram_id=tg_id)
+    await _answer_message(update, context, text, voice_mode=voice_mode)
 
-    # Kunlik limit (tarif bo'yicha)
-    plan = db.get_premium_plan(user_id)
-    if not db.is_premium(user_id):
-        plan = "free"
-    limit = {"free": 20, "go": 100, "pro": 500}.get(plan, 0)
-    if limit > 0:
-        used = db.daily_usage(user_id)
-        if used >= limit:
-            await update.message.reply_text(
-                f"⛔ Kunlik limit tugadi ({used}/{limit} so'rov).\n\n"
-                f"Tarifingiz: <b>{plan}</b>\n"
-                "Limitni oshirish — <code>/premium</code> (Go/Pro/Ultra).",
-                parse_mode="HTML",
-            )
-            return
 
-    # joriy suhbat: xotiradan yoki oxirgisidan
-    conv_id = current_conv.get(tg_id)
-    if conv_id is not None:
-        conv = db.get_conversation(conv_id)
-        if not conv or conv["user_id"] != user_id:
-            conv_id = None
-    if conv_id is None:
-        convs = db.list_conversations(user_id)
-        conv_id = convs[0]["id"] if convs else db.create_conversation(user_id, text)
-
-    db.add_message(user_id, "user", text, conversation_id=conv_id)
-    reply, source = brain.answer(text, db.get_knowledge())
-    msg_id = db.add_message(
-        user_id, "assistant", reply, source=source, conversation_id=conv_id
+async def on_group_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Guruh rejimi: @Inomjonai_bot mention qilinsa javob beradi."""
+    if not update.message or not update.message.text:
+        return
+    text = update.message.text.strip()
+    low = text.lower()
+    me = (update.effective_user.username or "").lower()
+    if me and me in low:
+        text = low.replace(me, "").strip()
+    if not text or not any(
+        k in low for k in ("inomjonai_bot", "@inomjon", "ai assistant", "neuraai")
+    ):
+        return
+    text = re.sub(r"@inomjonai_bot", "", text, flags=re.IGNORECASE).strip()
+    if not text:
+        text = "salom"
+    await update.message.reply_text(
+        "🤖 <b>NeuraAI:</b> javob tayyorlanmoqda...", parse_mode="HTML"
     )
-    if source == "fallback":
-        db.add_unanswered(text, user_id)
     try:
-        db.bump_daily_usage(user_id)
-    except Exception:
-        pass
+        db = get_db()
+        user_id = db.get_or_create_user(telegram_id=update.effective_user.id)
+        conv_id = db.create_conversation(user_id, "👥 Guruh")
+        db.add_message(user_id, "user", text, conversation_id=conv_id)
+        reply, source = brain.answer(text, db.get_knowledge())
+        db.add_message(
+            user_id, "assistant", reply, source=source, conversation_id=conv_id
+        )
+        if len(reply) > 4000:
+            reply = reply[:4000] + "..."
+        await update.message.reply_text(reply, parse_mode="HTML")
+    except Exception as e:
+        await update.message.reply_text(f"Xatolik: {e}")
 
+
+_STRINGS = {
+    "limit": {
+        "uz": "⛔ Kunlik limit tugadi ({used}/{limit} so'rov).\n\nTarifingiz: <b>{plan}</b>\nLimitni oshirish — <code>/premium</code> (Go/Pro/Ultra).",
+        "ru": "⛔ Дневной лимит исчерпан ({used}/{limit} запросов).\n\nТариф: <b>{plan}</b>\nУвеличить лимит — <code>/premium</code> (Go/Pro/Ultra).",
+        "en": "⛔ Daily limit reached ({used}/{limit} requests).\n\nPlan: <b>{plan}</b>\nUpgrade — <code>/premium</code> (Go/Pro/Ultra).",
+    },
+    "voice_working": {
+        "uz": "🎤 Eshitayapman... (matnga aylantirilmoqda)",
+        "ru": "🎤 Слушаю... (преобразование в текст)",
+        "en": "🎤 Listening... (converting to text)",
+    },
+    "voice_fail": {
+        "uz": "Ovozli xabarni tushunolmadim. Yana bir bor, aniqroq gapiring yoki matn yozing.",
+        "ru": "Не удалось распознать голос. Повторите чётче или напишите текстом.",
+        "en": "Couldn't understand the voice. Try again more clearly or type.",
+    },
+    "voice_said": {
+        "uz": "📝 <b>Siz aytdingiz:</b> {text}",
+        "ru": "📝 <b>Вы сказали:</b> {text}",
+        "en": "📝 <b>You said:</b> {text}",
+    },
+    "lang_changed": {
+        "uz": "✅ Til o'zgartirildi: O'zbekcha",
+        "ru": "✅ Язык изменён: Русский",
+        "en": "✅ Language changed: English",
+    },
+}
+
+
+def _t(user_id: int, key: str, **kw) -> str:
+    """Foydalanuvchi tiliga qarab matn qaytaradi (uz/ru/en)."""
+    try:
+        lang = get_db().get_settings(user_id).get("lang", "uz")
+    except Exception:
+        lang = "uz"
+    s = _STRINGS.get(key, {}).get(lang) or _STRINGS.get(key, {}).get("uz", key)
+    if kw:
+        try:
+            s = s.format(**kw)
+        except Exception:
+            pass
+    return s
+
+
+async def lang_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Til tanlash tugmalari."""
     kb = InlineKeyboardMarkup(
         [
             [
-                InlineKeyboardButton("👍", callback_data=f"rate:{msg_id}:1"),
-                InlineKeyboardButton("👎", callback_data=f"rate:{msg_id}:-1"),
-            ]
+                InlineKeyboardButton("🇺🇿 O'zbekcha", callback_data="lang:uz"),
+                InlineKeyboardButton("🇷🇺 Русский", callback_data="lang:ru"),
+            ],
+            [InlineKeyboardButton("🇬🇧 English", callback_data="lang:en")],
         ]
     )
-    if voice_mode:
-        try:
-            await update.message.reply_text("🗣 Ovoz tayyorlanmoqda...")
-            import pollinations  # ElevenLabs dan avtomatik: fallback qiladi
-
-            data, err = None, "no-voice"
-            try:
-                import elevenlabs
-
-                if elevenlabs.available():
-                    data, err = elevenlabs.generate_voice(reply)
-            except Exception:
-                pass
-            if not data and pollinations.available():
-                data, err = pollinations.generate_audio(reply)
-            if data:
-                with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
-                    f.write(data)
-                    tmp = f.name
-                try:
-                    with open(tmp, "rb") as f:
-                        await update.message.reply_voice(f)
-                finally:
-                    os.unlink(tmp)
-                await update.message.reply_text(reply)
-            else:
-                await update.message.reply_text(reply)
-        except Exception as e:
-            logging.warning("Ovoz yuborilolmadi (%s); matn yuborildi", e)
-            await update.message.reply_text(reply, reply_markup=kb)
-        return
-    await update.message.reply_text(reply, reply_markup=kb)
+    await update.message.reply_text(
+        "🌐 <b>Tilni tanlang / Выберите язык / Choose language:</b>",
+        parse_mode="HTML",
+        reply_markup=kb,
+    )
 
 
 async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
     data = query.data
+    if data.startswith("lang:"):
+        lang = data.split(":", 1)[1]
+        if lang in ("uz", "ru", "en"):
+            uid = update.effective_user.id
+            db = get_db()
+            user_id = db.get_or_create_user(telegram_id=uid)
+            cur = db.get_settings(user_id)
+            db.set_settings(user_id, lang, cur.get("theme", "dark"))
+            names = {"uz": "O'zbekcha", "ru": "Русский", "en": "English"}
+            await query.edit_message_text(
+                f"✅ <b>{names.get(lang, lang)}</b> tanlandi!",
+                parse_mode="HTML",
+            )
+        return
     if data.startswith("menu:"):
         action = data.split(":", 1)[1]
         uid = update.effective_user.id
@@ -681,8 +939,18 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         )
         return
 
-    # --- Rasm: internetdan topish / tarjima ---
-    if len(parts) == 3 and parts[0] == "img" and parts[1] in ("search", "translate"):
+    # --- Rasm: internetdan topish / tarjima / tahrirlash ---
+    if (
+        len(parts) == 3
+        and parts[0] == "img"
+        and parts[1]
+        in (
+            "search",
+            "translate",
+            "retro",
+            "upscale",
+        )
+    ):
         action, file_id = parts[1], parts[2]
         await query.edit_message_text("⏳ Iltimos kuting...")
         try:
@@ -694,8 +962,10 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             try:
                 if action == "search":
                     await _img_web_search(query, path)
-                else:
+                elif action == "translate":
                     await _img_translate(query, path)
+                else:
+                    await _img_edit(query, path, action)
             finally:
                 os.unlink(path)
         except Exception as e:
@@ -767,6 +1037,33 @@ async def _img_translate(query, path: str) -> None:
         f"🇺🇿 <b>O'zbekcha tarjima:</b>\n{result[:2000]}",
         parse_mode="HTML",
     )
+
+
+async def _img_edit(query, path: str, action: str) -> None:
+    """Rasmni tahrirlaydi: retro | upscale va natijani yuboradi."""
+    from vision import edit_image
+
+    dest = tempfile.mktemp(suffix=".png")
+    try:
+        ok = edit_image(path, dest, action)
+        if not ok:
+            await query.edit_message_text("Rasmni tahrirlay olmadim.")
+            return
+        with open(dest, "rb") as f:
+            await query.message.reply_photo(
+                f,
+                caption="🖼 Retro uslubda!"
+                if action == "retro"
+                else "🔍 Kattalashtirildi!",
+            )
+        await query.edit_message_text("✅ Tayyor! Tahrirlangan rasm yuqorida.")
+    except Exception as e:
+        await query.edit_message_text(f"Xatolik: {e}")
+    finally:
+        try:
+            os.unlink(dest)
+        except OSError:
+            pass
 
 
 async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -842,7 +1139,13 @@ async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         buttons.append(
             InlineKeyboardButton("🔄 Tarjima", callback_data=f"img:translate:{file_id}")
         )
-    kb = InlineKeyboardMarkup([buttons])
+    buttons2 = [
+        InlineKeyboardButton("🖼 Retro", callback_data=f"img:retro:{file_id}"),
+        InlineKeyboardButton(
+            "🔍 Kattalashtirish", callback_data=f"img:upscale:{file_id}"
+        ),
+    ]
+    kb = InlineKeyboardMarkup([buttons, buttons2])
     await update.message.reply_text(text, parse_mode="HTML", reply_markup=kb)
 
 
@@ -933,6 +1236,10 @@ def _build_app() -> Application:
     app.add_handler(CommandHandler("new", new_chat))
     app.add_handler(CommandHandler("premium", premium_cmd))
     app.add_handler(CommandHandler("pay", premium_cmd))
+    app.add_handler(CommandHandler("ibrat", ibrat_cmd))
+    app.add_handler(CommandHandler("yangilik", yangilik_cmd))
+    app.add_handler(CommandHandler("til", lang_cmd))
+    app.add_handler(CommandHandler("lang", lang_cmd))
     app.add_handler(
         ConversationHandler(
             entry_points=[CommandHandler("register", register_cmd)],
@@ -961,7 +1268,14 @@ def _build_app() -> Application:
             fallbacks=[CommandHandler("cancel", cancel_cmd)],
         )
     )
+    app.add_handler(
+        MessageHandler(
+            filters.TEXT & ~filters.COMMAND & filters.ChatType.GROUPS,
+            on_group_message,
+        )
+    )
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_message))
+    app.add_handler(MessageHandler(filters.VOICE, on_voice))
     app.add_handler(MessageHandler(filters.PHOTO, on_photo))
     app.add_handler(MessageHandler(filters.Document, on_document))
     app.add_handler(CallbackQueryHandler(on_callback))

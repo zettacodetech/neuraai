@@ -202,3 +202,62 @@ def describe(path: str, timeout: float = 90.0) -> str:
         except Exception:
             continue
     return ""
+
+
+def edit_image(
+    src: str,
+    dest: str,
+    action: str,
+    *,
+    width: int | None = None,
+    background: tuple[int, int, int] = (0, 255, 0),
+) -> bool:
+    """Rasmni tahrirlaydi (Pillow): retro | upscale | bg-remove.
+
+    - retro: sepia + vinjetka (eski uslub)
+    - upscale: kattalashtirish (2x, lanczos)
+    - bg-remove: yashil fonni o'chirish (chroma key usuli)
+    (ok, xato emas) qaytaradi.
+    """
+    try:
+        from PIL import Image, ImageFilter, ImageOps
+
+        im = Image.open(src).convert("RGB")
+        if action == "retro":
+            im = ImageOps.autocontrast(im)
+            im = im.convert("L")
+            im = Image.merge(
+                "RGB",
+                (
+                    im.point(lambda v: min(255, int(v * 1.1))),
+                    im.point(lambda v: min(255, int(v * 0.86))),
+                    im.point(lambda v: min(255, int(v * 0.66))),
+                ),
+            )
+            im = im.filter(ImageFilter.GaussianBlur(0.4))
+        elif action == "upscale":
+            w = im.width
+            h = im.height
+            scale = 2 if not width or width <= 0 else width / w
+            im = im.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
+            im = im.filter(ImageFilter.UnsharpMask(radius=2, percent=80))
+        elif action == "bg-remove":
+            im = im.convert("RGBA")
+            bg = (background[0], background[1], background[2])
+            data = im.getdata()
+            new_data = []
+            for item in data:
+                r, g, b, a = item
+                dr, dg, db = r - bg[0], g - bg[1], b - bg[2]
+                dist = (dr * dr + dg * dg + db * db) ** 0.5
+                if dist < 60:
+                    new_data.append((r, g, b, 0))
+                else:
+                    new_data.append((r, g, b, a))
+            im.putdata(new_data)
+        else:
+            return False
+        im.save(dest)
+        return True
+    except Exception:
+        return False

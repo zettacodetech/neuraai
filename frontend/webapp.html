@@ -97,6 +97,13 @@
       </div>
       <button class="wa-btn" id="payBtn">⭐ To'lovni boshlash</button>
       <p class="wa-note">To'lov tugmasi bosilganda Telegram to'lov oynasi ochiladi. To'lov tugagach tarif avtomatik yoqiladi.</p>
+      <div class="wa-card" style="margin-top:16px">
+        <h3>🎁 Premium sovg'a qilish</h3>
+        <p class="wa-note" style="margin-top:0">O'z premium kunlaringizdan do'stingizga sovg'a qiling (1-30 kun). Siz premium bo'lishingiz kerak.</p>
+        <div class="field"><label>Do'st username/email</label><input id="giftUser" type="text" placeholder="username yoki email" /></div>
+        <div class="field"><label>Kunlar soni</label><input id="giftDays" type="number" min="1" max="30" value="7" /></div>
+        <button class="wa-btn ghost" id="giftBtn">🎁 Sovg'a qilish</button>
+      </div>
     </section>
 
     <section id="tab-profile" style="display:none">
@@ -300,6 +307,21 @@
           body: JSON.stringify({ token: TOKEN, name: $("pName").value, phone: $("pPhone").value })
         });
         status("✅ Profil saqlandi");
+        await loadProfile();
+      } catch (e) { status(e.message, true); }
+    };
+
+    $("giftBtn").onclick = async () => {
+      const recipient = $("giftUser").value.trim();
+      const days = parseInt($("giftDays").value, 10) || 7;
+      if (!recipient) { status("Do'stingiz username yoki email kiriting.", true); return; }
+      try {
+        const r = await apiFetch("/api/gift", {
+          method: "POST",
+          body: JSON.stringify({ token: TOKEN, recipient, days })
+        });
+        status("✅ " + r.message);
+        $("giftUser").value = "";
         await loadProfile();
       } catch (e) { status(e.message, true); }
     };

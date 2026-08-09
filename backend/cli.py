@@ -14,6 +14,7 @@ Ishlatish:
 import argparse
 import json
 import os
+import subprocess
 import sys
 
 from brain import brain
@@ -98,10 +99,35 @@ def chat_mode(model: str) -> None:
                     mark = " →" if k == model else ""
                     print(f"   {k}: {v}{mark}")
             continue
+        if low.startswith("!run") or low.startswith("!py"):
+            code = q.split(" ", 1)[1].strip() if " " in q else ""
+            if not code:
+                print(f"{CYAN}ai> Misol: !run print(2+2){RESET}")
+                continue
+            print(f"{CYAN}ai> (kod bajarilmoqda…){RESET}")
+            try:
+                proc = subprocess.run(
+                    [sys.executable, "-c", code],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                )
+                if proc.stdout:
+                    print(f"{GREEN}{proc.stdout.rstrip()}{RESET}")
+                if proc.stderr:
+                    print(f"{RED}{proc.stderr.rstrip()}{RESET}")
+                if not proc.stdout and not proc.stderr:
+                    print(f"{DARK}(natija yo'q){RESET}")
+            except subprocess.TimeoutExpired:
+                print(f"{RED}⏱ Vaqt tugadi (10 soniya).{RESET}")
+            except Exception as e:
+                print(f"{RED}⚠️ {e}{RESET}")
+            continue
         if low in ("/help", "yordam"):
             print(f"{CYAN}ai> Nima qila olaman:{RESET}")
             print("   • Istalgan savolga javob beraman")
             print("   • Kod yozaman (masalan: 'telegram bot yoz')")
+            print("   • Kod bajaraman (!run print('salom'))")
             print("   • Rasm tahlil qilaman (--image)")
             print("   • Yangi rasm/video yarataman (--gen-image --gen-video)")
             print("   • Internetdan izlayman")
@@ -182,10 +208,20 @@ def main() -> None:
         "--gen-video", metavar="PROMPT", help="prompt'dan video yaratish"
     )
     parser.add_argument("--stats", action="store_true", help="statistika")
+    parser.add_argument("--news", action="store_true", help="bugungi yangiliklar")
     args = parser.parse_args()
 
     model = args.model
-    if args.chat:
+    if args.news:
+        from websearch import search_answer
+
+        print(BANNER)
+        summary = search_answer(
+            "bugungi eng muhim jahon va O'zbekiston yangiliklari", 4
+        )
+        print(f"{CYAN}📰 Bugungi yangiliklar:{RESET}")
+        print(summary or "Yangiliklarni topa olmadim.")
+    elif args.chat:
         chat_mode(model)
     elif args.image:
         from vision import analyze

@@ -1,5 +1,6 @@
 import os
 import re
+import shutil
 import sys
 import tempfile
 import threading
@@ -145,6 +146,12 @@ class ProfileUpdateRequest(BaseModel):
     name: str = ""
     surname: str = ""
     phone: str = ""
+
+
+class GiftRequest(BaseModel):
+    token: str = ""
+    recipient: str = ""
+    days: int = 7
 
 
 class ChangePasswordRequest(BaseModel):
@@ -356,6 +363,40 @@ def gen_api_status() -> JSONResponse:
 
 
 _version_cache: dict = {}
+_news_cache: dict = {}
+
+
+@app.get("/api/news")
+def news() -> JSONResponse:
+    """Kunlik yangiliklar (5 daqiqa cache) — sayt, ilova, CLI uchun."""
+    now = time.time()
+    if _news_cache and now - _news_cache["ts"] < 300:
+        return JSONResponse(_news_cache["data"])
+    try:
+        from websearch import search_answer
+
+        text = search_answer("bugungi eng muhim jahon va O'zbekiston yangiliklari", 5)
+        items = []
+        if text:
+            for line in text.splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                line = line.lstrip("-•*# ")
+                link = ""
+                parts = line.split("http")
+                if len(parts) > 1:
+                    link = "http" + parts[1].split()[0].rstrip(".,;")
+                items.append(
+                    {"text": parts[0].strip().rstrip(":") or line[:200], "link": link}
+                )
+                if len(items) >= 8:
+                    break
+        data = {"ok": True, "items": items, "summary": text or ""}
+    except Exception as e:
+        data = {"ok": False, "error": str(e), "items": []}
+    _news_cache = {"ts": now, "data": data}
+    return JSONResponse(data)
 
 
 @app.get("/api/version")
@@ -1247,9 +1288,16 @@ def local_ai_pull(req: LocalAiPullRequest) -> JSONResponse:
 # ================= Yangi funksiyalar: eksport, notalar, til, referal =================
 
 
+def _esc(s: str) -> str:
+    """PDF (reportlab HTML) uchun matnni xavfsiz qiladi."""
+    return str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
 @app.get("/api/export")
-def export_conversation(token: str = "", conversation_id: int = 0) -> JSONResponse:
-    """Suhbatni TXT ko'rinishida eksport qilish (barchasi local)."""
+def export_conversation(
+    token: str = "", conversation_id: int = 0, format: str = "txt"
+) -> JSONResponse:
+    """Suhbatni TXT yoki PDF ko'rinishida eksport qilish (barchasi local)."""
     db = get_db()
     user = db.get_user_by_token(token) if token else None
     if not user:
@@ -1259,6 +1307,61 @@ def export_conversation(token: str = "", conversation_id: int = 0) -> JSONRespon
     data = db.export_conversation(conversation_id, user["id"])
     if not data:
         return JSONResponse({"error": "suhbat topilmadi"}, status_code=404)
+    fmt = (format or "txt").lower().strip()
+    if fmt == "pdf":
+        try:
+            from reportlab.lib.pagesizes import A4
+            from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+            from reportlab.lib.units import mm
+            from reportlab.pdfbase import pdfmetrics
+            from reportlab.pdfbase.ttfonts import TTFont
+            from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
+
+            import io as _io
+
+            buf = _io.BytesIO()
+            doc = SimpleDocTemplate(
+                buf, pagesize=A4, topMargin=18 * mm, bottomMargin=18 * mm
+            )
+            styles = getSampleStyleSheet()
+            title_st = ParagraphStyle(
+                "T", parent=styles["Title"], fontSize=18, spaceAfter=6
+            )
+            user_st = ParagraphStyle(
+                "U",
+                parent=styles["BodyText"],
+                fontSize=11,
+                leading=15,
+                textColor="#1f2937",
+            )
+            ai_st = ParagraphStyle(
+                "A",
+                parent=styles["BodyText"],
+                fontSize=11,
+                leading=15,
+                textColor="#5b21b6",
+                spaceBefore=8,
+            )
+            flow = [Paragraph(_esc(data["title"] or "Suhbat"), title_st)]
+            for m in data["messages"]:
+                who = "Siz" if m["role"] == "user" else "Neura AI"
+                st = user_st if m["role"] == "user" else ai_st
+                flow.append(Paragraph(f"<b>{who}:</b> {_esc(m['text'])}", st))
+                flow.append(Spacer(1, 3))
+            doc.build(flow)
+            raw = buf.getvalue()
+            from fastapi.responses import Response
+
+            return Response(
+                content=raw,
+                media_type="application/pdf",
+                headers={
+                    "Content-Disposition": f'attachment; filename="suhbat-{conversation_id}.pdf"'
+                },
+            )
+        except Exception as e:
+            return JSONResponse({"error": f"PDF xato: {e}"}, status_code=500)
+
     lines = [f"# {data['title'] or 'Suhbat'}"]
     for m in data["messages"]:
         who = "Siz" if m["role"] == "user" else "Neura AI"
@@ -2076,6 +2179,23 @@ def update_profile(req: ProfileUpdateRequest) -> JSONResponse:
     )
 
 
+@app.post("/api/gift")
+def gift_premium(req: GiftRequest) -> JSONResponse:
+    """Premium kunlarini do'stga sovg'a qilish (1-30 kun)."""
+    db = get_db()
+    user = db.get_user_by_token(req.token)
+    if not user:
+        return JSONResponse({"error": "kirish talab qilinadi"}, status_code=401)
+    if not req.recipient.strip():
+        return JSONResponse(
+            {"error": "qabul qiluvchi username yoki email kiriting"}, status_code=400
+        )
+    ok, msg = db.gift_premium(user["id"], req.recipient.strip(), int(req.days or 7))
+    if not ok:
+        return JSONResponse({"error": msg}, status_code=400)
+    return JSONResponse({"ok": True, "message": msg})
+
+
 @app.post("/api/change-password")
 def change_password(req: ChangePasswordRequest) -> JSONResponse:
     db = get_db()
@@ -2437,3 +2557,89 @@ def admin_answer(req: AnswerRequest) -> JSONResponse:
     db = get_db()
     db.answer_unanswered(req.item_id, req.answer)
     return JSONResponse({"ok": True})
+
+
+class RunCodeRequest(BaseModel):
+    token: str = ""
+    code: str = ""
+    language: str = "python"
+
+
+@app.post("/api/run-code")
+def run_code(req: RunCodeRequest) -> JSONResponse:
+    """Kodni sandbox'da bajaradi (python/js, timeout 10s, resource cheklovi)."""
+    import subprocess
+
+    db = get_db()
+    user = db.get_user_by_token(req.token)
+    if not user:
+        return JSONResponse({"error": "kirish talab qilinadi"}, status_code=401)
+    code = req.code.strip()
+    if not code or len(code) > 8000:
+        return JSONResponse({"error": "kod bo'sh yoki juda uzun"}, status_code=400)
+
+    lang = req.language.lower().strip()
+    if lang not in ("python", "py", "js", "javascript", "bash", "sh"):
+        return JSONResponse(
+            {"error": "faqat python, javascript va bash qo'llab-quvvatlanadi"},
+            status_code=400,
+        )
+
+    if lang in ("python", "py"):
+        import tempfile as _tf
+
+        with _tf.NamedTemporaryFile("w", suffix=".py", delete=False) as f:
+            f.write(code)
+            fname = f.name
+        cmd = [sys.executable, fname]
+        env = {"PATH": "/usr/bin:/bin:/usr/local/bin"}
+    elif lang in ("bash", "sh"):
+        import tempfile as _tf
+
+        with _tf.NamedTemporaryFile("w", suffix=".sh", delete=False) as f:
+            f.write(code)
+            fname = f.name
+        cmd = ["bash", fname]
+        env = {"PATH": "/usr/bin:/bin:/usr/local/bin"}
+    else:
+        import tempfile as _tf
+
+        with _tf.NamedTemporaryFile("w", suffix=".js", delete=False) as f:
+            f.write(code)
+            fname = f.name
+        node = shutil.which("node")
+        if not node:
+            return JSONResponse({"error": "node o'rnatilmagan"}, status_code=500)
+        cmd = [node, fname]
+        env = {"PATH": "/usr/bin:/bin:/usr/local/bin"}
+
+    try:
+        proc = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            env=env,
+        )
+        out = (proc.stdout or "")[-4000:]
+        err = (proc.stderr or "")[-4000:]
+        ok = proc.returncode == 0
+        return JSONResponse(
+            {
+                "ok": ok,
+                "stdout": out,
+                "stderr": err,
+                "code": proc.returncode,
+            }
+        )
+    except subprocess.TimeoutExpired:
+        return JSONResponse(
+            {"ok": False, "stdout": "", "stderr": "⏱ Vaqt tugadi (10 soniya)."}
+        )
+    except Exception as e:
+        return JSONResponse({"ok": False, "stdout": "", "stderr": str(e)})
+    finally:
+        try:
+            os.unlink(fname)
+        except OSError:
+            pass

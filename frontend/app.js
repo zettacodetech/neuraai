@@ -2069,6 +2069,19 @@ if (exportDownloadBtn) exportDownloadBtn.addEventListener("click", () => {
   a.href = URL.createObjectURL(blob); a.download = "neura-suhbat.txt"; a.click();
   URL.revokeObjectURL(a.href);
 });
+const exportPdfBtn = document.getElementById("exportPdfBtn");
+if (exportPdfBtn) exportPdfBtn.addEventListener("click", async () => {
+  const convId = getActiveConvId() || currentConv;
+  if (!convId) { toast("Suhbat topilmadi"); return; }
+  try {
+    const res = await fetch(`/api/export?token=${encodeURIComponent(localStorage.getItem("neura_token") || "")}&conversation_id=${convId}&format=pdf`);
+    if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || "PDF xatolik"); }
+    const blob = await res.blob();
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob); a.download = "neura-suhbat.pdf"; a.click();
+    URL.revokeObjectURL(a.href);
+  } catch (e) { toast(e.message); }
+});
 
 function getActiveConvId() {
   const active = document.querySelector(".conv-item.active");

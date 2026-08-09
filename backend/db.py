@@ -559,6 +559,67 @@ class Database:
             )
         return new_until.isoformat()
 
+    def gift_premium(
+        self, giver_id: int, recipient_username: str, days: int
+    ) -> tuple[bool, str]:
+        """Premium kunlarini do'stga sovg'a qiladi.
+
+        Giver premium bo'lishi kerak va yetarli kunlari bo'lishi kerak.
+        Recipient username/email bo'yicha topiladi.
+        (ok, xabar) qaytaradi.
+        """
+        from datetime import datetime
+
+        recipient = self.get_user_by_username(
+            recipient_username
+        ) or self.get_user_by_email(recipient_username)
+        if not recipient:
+            return False, "Qabul qiluvchi topilmadi (username yoki email xato)."
+        if recipient["id"] == giver_id:
+            return False, "O'zingizga sovg'a qila olmaysiz."
+        if not self.is_premium(giver_id):
+            return False, "Siz premium emassiz — avval premium sotib oling."
+        if days <= 0 or days > 30:
+            return False, "1 dan 30 kungacha sovg'a qilish mumkin."
+
+        giver_until = self.get_premium_until(giver_id)
+        if not giver_until:
+            return False, "Premium holati aniqlanmadi."
+        try:
+            giver_dt = datetime.fromisoformat(giver_until)
+            if giver_dt.tzinfo is None:
+                giver_dt = giver_dt.replace(tzinfo=self._now_utc().tzinfo)
+        except ValueError:
+            return False, "Premium holati xato."
+
+        # Giver premium muddatidan kunlarini ayiramiz
+        from datetime import timedelta
+
+        new_giver_until = giver_dt - timedelta(days=days)
+        now = self._now_utc()
+        if new_giver_until <= now:
+            return False, (
+                f"Sizda atigi {(giver_dt - now).days} kun premium bor — "
+                f"{days} kunni sovg'a qilish uchun yetarli emas."
+            )
+
+        plan = self.get_premium_plan(giver_id)
+        self.add_premium_days(recipient["id"], days, plan=plan)
+        if self.pg:
+            self._execute(
+                "UPDATE users SET premium_until = %s WHERE id = %s",
+                (new_giver_until, giver_id),
+            )
+        else:
+            self._execute(
+                "UPDATE users SET premium_until = ? WHERE id = ?",
+                (new_giver_until.isoformat(), giver_id),
+            )
+        return True, (
+            f"{days} kun premium {recipient['username'] or recipient['email']} "
+            f"hisobiga o'tkazildi!"
+        )
+
     def add_payment(
         self,
         user_id: int,

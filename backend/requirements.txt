@@ -9,3 +9,4 @@ opencv-python-headless==5.0.0.93
 psycopg2-binary==2.9.12
 pypdf==5.4.0
 python-docx==1.1.2
+reportlab==4.2.5
