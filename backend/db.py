@@ -702,7 +702,7 @@ class Database:
             (user_id,),
         )
         by_day = self._rows(
-            "SELECT substr(created_at, 1, 10) AS day, count(*) AS n "
+            "SELECT SUBSTR(CAST(created_at AS TEXT), 1, 10) AS day, count(*) AS n "
             "FROM messages WHERE user_id = ? GROUP BY day ORDER BY day DESC LIMIT 14",
             (user_id,),
         )
@@ -736,7 +736,7 @@ class Database:
             "GROUP BY source ORDER BY n DESC LIMIT 8"
         )
         for_days = self._rows(
-            "SELECT substr(created_at, 1, 10) AS day, count(*) AS n "
+            "SELECT SUBSTR(CAST(created_at AS TEXT), 1, 10) AS day, count(*) AS n "
             "FROM messages GROUP BY day ORDER BY day DESC LIMIT 7"
         )
         top_users = self._rows(
