@@ -127,6 +127,22 @@ CREATE TABLE IF NOT EXISTS settings (
     theme   TEXT DEFAULT 'dark',
     updated_at TEXT DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS daily_usage (
+    id      INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    day     TEXT NOT NULL,
+    count   INTEGER DEFAULT 0,
+    UNIQUE(user_id, day)
+);
+
+CREATE TABLE IF NOT EXISTS notifications (
+    id      INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    kind    TEXT NOT NULL,
+    sent_at TEXT NOT NULL,
+    UNIQUE(user_id, kind)
+);
 """
 
 _PG_DDL = [
@@ -254,6 +270,24 @@ _PG_DDL = [
         lang    TEXT DEFAULT 'uz',
         theme   TEXT DEFAULT 'dark',
         updated_at TIMESTAMPTZ DEFAULT now()
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS daily_usage (
+        id      BIGSERIAL PRIMARY KEY,
+        user_id BIGINT NOT NULL,
+        day     TEXT NOT NULL,
+        count   INTEGER DEFAULT 0,
+        UNIQUE(user_id, day)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS notifications (
+        id      BIGSERIAL PRIMARY KEY,
+        user_id BIGINT NOT NULL,
+        kind    TEXT NOT NULL,
+        sent_at TIMESTAMPTZ DEFAULT now(),
+        UNIQUE(user_id, kind)
     )
     """,
 ]
@@ -1162,6 +1196,10 @@ class Database:
                 "INSERT INTO referrals (referrer_id, referred_id) VALUES (?, ?)",
                 (referrer_id, referred_id),
             )
+            # Bonus: do'st ulashgan uchun referrer'ga 7 kun premium
+            self.add_premium_days(
+                referrer_id, 7, plan=self.get_premium_plan(referrer_id)
+            )
         return True
 
     def list_referrals(self, user_id: int) -> list:
@@ -1172,6 +1210,94 @@ class Database:
             (user_id,),
         )
         return [dict(r) for r in rows]
+
+    # ================= Kunlik limit (Free/Go/Pro/Ultra) =================
+    def daily_usage(self, user_id: int) -> int:
+        day = self._now_utc().strftime("%Y-%m-%d")
+        row = self._row(
+            "SELECT count FROM daily_usage WHERE user_id = ? AND day = ?",
+            (user_id, day),
+        )
+        return int(self._row_get(row, "count") or 0)
+
+    def bump_daily_usage(self, user_id: int) -> int:
+        day = self._now_utc().strftime("%Y-%m-%d")
+        with self._lock:
+            if self.pg:
+                self._execute(
+                    "INSERT INTO daily_usage (user_id, day, count) VALUES (%s, %s, 1) "
+                    "ON CONFLICT (user_id, day) DO UPDATE SET count = daily_usage.count + 1 "
+                    "RETURNING count",
+                    (user_id, day),
+                )
+                row = self._row(
+                    "SELECT count FROM daily_usage WHERE user_id = %s AND day = %s",
+                    (user_id, day),
+                )
+                return int(self._row_get(row, "count") or 1)
+            self._execute(
+                "INSERT INTO daily_usage (user_id, day, count) VALUES (?, ?, 1) "
+                "ON CONFLICT(user_id, day) DO UPDATE SET count = daily_usage.count + 1",
+                (user_id, day),
+            )
+            row = self._row(
+                "SELECT count FROM daily_usage WHERE user_id = ? AND day = ?",
+                (user_id, day),
+            )
+            return int(self._row_get(row, "count") or 1)
+
+    # ================= Xabarnomalar (premium tugashi) =================
+    def notification_sent(self, user_id: int, kind: str) -> bool:
+        row = self._row(
+            "SELECT id FROM notifications WHERE user_id = ? AND kind = ?",
+            (user_id, kind),
+        )
+        return row is not None
+
+    def mark_notification(self, user_id: int, kind: str) -> None:
+        with self._lock:
+            self._execute(
+                "INSERT INTO notifications (user_id, kind, sent_at) VALUES (?, ?, ?)",
+                (user_id, kind, self._now_utc().isoformat()),
+            )
+
+    def get_notified_users(self, kind_prefix: str) -> list:
+        """kind_prefix bilan boshlanuvchi xabarnoma olgan userlar id lari."""
+        rows = self._rows(
+            "SELECT user_id FROM notifications WHERE kind LIKE ?",
+            (kind_prefix + "%",),
+        )
+        return [int(r["user_id"]) for r in rows]
+
+    def users_expiring_soon(self, days: int) -> list:
+        """Muddati `days` kun ichida tugaydigan premium userlar."""
+        from datetime import timedelta
+
+        now = self._now_utc()
+        threshold = (now + timedelta(days=days)).isoformat()
+        rows = self._rows(
+            "SELECT id, telegram_id, premium_until FROM users "
+            "WHERE premium_until IS NOT NULL AND premium_until <= ?",
+            (threshold,),
+        )
+        out = []
+        for r in rows:
+            until = self._row_get(r, "premium_until")
+            if not until:
+                continue
+            try:
+                from datetime import datetime
+
+                u = datetime.fromisoformat(str(until))
+                if u.tzinfo is None:
+                    u = u.replace(tzinfo=now.tzinfo)
+                if u > now:
+                    out.append(
+                        {"id": r["id"], "telegram_id": r["telegram_id"], "until": until}
+                    )
+            except ValueError:
+                continue
+        return out
 
 
 _db_instance: Database | None = None

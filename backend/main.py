@@ -71,6 +71,32 @@ def _api_key_allowed(key: str) -> bool:
         return True
 
 
+# ================= Kunlik limit (tarif bo'yicha) =================
+DAILY_LIMITS = {"free": 20, "go": 100, "pro": 500, "ultra": 0}  # 0 = cheksiz
+
+
+def _check_daily_limit(db, user_id: int) -> dict | None:
+    """Limit oshgan bo'lsa error dict qaytaradi; aks holda None."""
+    plan = db.get_premium_plan(user_id)
+    if not db.is_premium(user_id):
+        plan = "free"
+    limit = DAILY_LIMITS.get(plan, 20)
+    if limit <= 0:
+        return None
+    used = db.daily_usage(user_id)
+    if used >= limit:
+        return {
+            "error": (
+                f"Kunlik limit tugadi ({used}/{limit} so'rov). "
+                f"Tarifingiz: {plan}. /premium orqali oshiring."
+            ),
+            "limit": limit,
+            "used": used,
+            "plan": plan,
+        }
+    return None
+
+
 class ChatRequest(BaseModel):
     message: str
     user_id: str | int | None = None
@@ -470,6 +496,11 @@ def chat(req: ChatRequest) -> JSONResponse:
         else:
             user_id = db.get_or_create_user(None, uid_str)
 
+    # ---- Kunlik limit (tarif bo'yicha) ----
+    limit_status = _check_daily_limit(db, user_id)
+    if limit_status:
+        return JSONResponse(limit_status, status_code=429)
+
     conv_id = req.conversation_id
     if conv_id is not None:
         conv = db.get_conversation(conv_id)
@@ -573,6 +604,10 @@ def chat(req: ChatRequest) -> JSONResponse:
     }
     if user and user.get("name"):
         resp["user_name"] = user["name"]
+    try:
+        db.bump_daily_usage(user_id)
+    except Exception:
+        pass
     return JSONResponse(resp)
 
 
@@ -615,6 +650,14 @@ def _resolve_chat(req: "ChatRequest") -> dict:
             user_id = db.get_or_create_user(None, str(tg))
         else:
             user_id = db.get_or_create_user(None, uid_str)
+
+    # ---- Kunlik limit (tarif bo'yicha) ----
+    limit_status = _check_daily_limit(db, user_id)
+    if limit_status:
+        return {
+            "error": JSONResponse(limit_status, status_code=429),
+            "used_limit": True,
+        }
 
     conv_id = req.conversation_id
     if conv_id is not None:
@@ -707,6 +750,10 @@ def _chat_stream_events(req: "ChatRequest", ctx: dict) -> Iterable[str]:
                 user_id, "assistant", reply, source="error", conversation_id=conv_id
             )
             yield _sse({"type": "error", "reply": reply, "message_id": msg_id})
+        try:
+            db.bump_daily_usage(user_id)
+        except Exception:
+            pass
         yield _sse({"type": "done", "conversation_id": conv_id})
         return
 
@@ -796,6 +843,11 @@ def _chat_stream_events(req: "ChatRequest", ctx: dict) -> Iterable[str]:
     )
     if source == "fallback":
         db.add_unanswered(req.message, user_id)
+
+    try:
+        db.bump_daily_usage(user_id)
+    except Exception:
+        pass
 
     yield _sse(
         {

@@ -531,6 +531,12 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         return
 
     low = text.lower()
+    voice_mode = text.startswith(("voice:", "ovoz:", "🗣", "🎤"))
+    if voice_mode:
+        text = (
+            text.split(":", 1)[1].strip() if ":" in text else text.lstrip("🗣🎤").strip()
+        )
+        low = text.lower()
     if any(
         k in low for k in ("rasm yarat", "rasm chiz", "logotip yarat", "suret yarat")
     ):
@@ -555,6 +561,22 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     db = get_db()
     user_id = db.get_or_create_user(telegram_id=tg_id)
 
+    # Kunlik limit (tarif bo'yicha)
+    plan = db.get_premium_plan(user_id)
+    if not db.is_premium(user_id):
+        plan = "free"
+    limit = {"free": 20, "go": 100, "pro": 500}.get(plan, 0)
+    if limit > 0:
+        used = db.daily_usage(user_id)
+        if used >= limit:
+            await update.message.reply_text(
+                f"⛔ Kunlik limit tugadi ({used}/{limit} so'rov).\n\n"
+                f"Tarifingiz: <b>{plan}</b>\n"
+                "Limitni oshirish — <code>/premium</code> (Go/Pro/Ultra).",
+                parse_mode="HTML",
+            )
+            return
+
     # joriy suhbat: xotiradan yoki oxirgisidan
     conv_id = current_conv.get(tg_id)
     if conv_id is not None:
@@ -572,6 +594,10 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     )
     if source == "fallback":
         db.add_unanswered(text, user_id)
+    try:
+        db.bump_daily_usage(user_id)
+    except Exception:
+        pass
 
     kb = InlineKeyboardMarkup(
         [
@@ -581,6 +607,37 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             ]
         ]
     )
+    if voice_mode:
+        try:
+            await update.message.reply_text("🗣 Ovoz tayyorlanmoqda...")
+            import pollinations  # ElevenLabs dan avtomatik: fallback qiladi
+
+            data, err = None, "no-voice"
+            try:
+                import elevenlabs
+
+                if elevenlabs.available():
+                    data, err = elevenlabs.generate_voice(reply)
+            except Exception:
+                pass
+            if not data and pollinations.available():
+                data, err = pollinations.generate_audio(reply)
+            if data:
+                with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
+                    f.write(data)
+                    tmp = f.name
+                try:
+                    with open(tmp, "rb") as f:
+                        await update.message.reply_voice(f)
+                finally:
+                    os.unlink(tmp)
+                await update.message.reply_text(reply)
+            else:
+                await update.message.reply_text(reply)
+        except Exception as e:
+            logging.warning("Ovoz yuborilolmadi (%s); matn yuborildi", e)
+            await update.message.reply_text(reply, reply_markup=kb)
+        return
     await update.message.reply_text(reply, reply_markup=kb)
 
 
@@ -633,9 +690,6 @@ async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         f.write(raw)
     try:
         data = analyze_image(path)
-    except Exception as e:
-        await update.message.reply_text(f"Rasmni tahlil qila olmadim: {e}")
-    else:
         lines = [
             "📷 <b>Rasm tahlili:</b>",
             f"• Format: {data['format']}, {data['width']}×{data['height']}",
@@ -649,6 +703,79 @@ async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if exif.get("DateTimeOriginal"):
             lines.append(f"• Sana: {exif['DateTimeOriginal']}")
         text = "\n".join(lines)
+    except Exception as e:
+        await update.message.reply_text(f"Rasmni tahlil qila olmadim: {e}")
+        return
+    finally:
+        os.unlink(path)
+
+    # --- OCR: suratdagi matnni o'qish (Ollama vision model orqali) ---
+    try:
+        from vision import ocr as vision_ocr
+
+        ocr_text = vision_ocr(path)
+        if ocr_text:
+            text += "\n\n📝 <b>Suratdagi matn:</b>\n" + ocr_text[:1500]
+    except Exception:
+        pass
+
+    db = get_db()
+    user_id = db.get_or_create_user(telegram_id=update.effective_user.id)
+    conv_id = current_conv.get(update.effective_user.id)
+    if conv_id is not None:
+        conv = db.get_conversation(conv_id)
+        if not conv or conv["user_id"] != user_id:
+            conv_id = None
+    if conv_id is None:
+        conv_id = db.create_conversation(user_id, "📷 Rasm tahlili")
+    db.add_message(user_id, "user", "📷 Rasm yubordi", conversation_id=conv_id)
+    db.add_message(user_id, "assistant", text, source="vision", conversation_id=conv_id)
+
+    await update.message.reply_text(text, parse_mode="HTML")
+
+
+async def on_document(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Fayl tahlili: PDF/DOCX/TXT — matn ajratib, AI'ga savol berish mumkin."""
+    doc = update.message.document
+    name = (doc.file_name or "hujjat").lower()
+    ext = name.rsplit(".", 1)[-1] if "." in name else ""
+    if ext not in ("pdf", "docx", "doc", "txt", "md"):
+        await update.message.reply_text(
+            "Faqat PDF, DOCX, TXT, MD fayllarni qabul qilaman!"
+        )
+        return
+    await update.message.reply_text(
+        f"📄 <b>{doc.file_name}</b> o'qilmoqda...", parse_mode="HTML"
+    )
+    try:
+        file = await doc.get_file()
+        raw = await file.download_as_bytearray()
+        import io
+
+        text = ""
+        if ext in ("pdf",):
+            import pypdf
+
+            reader = pypdf.PdfReader(io.BytesIO(bytes(raw)))
+            text = "\n\n".join(p.extract_text() or "" for p in reader.pages)
+        elif ext in ("docx", "doc"):
+            import docx as docxlib
+
+            docxobj = docxlib.Document(io.BytesIO(bytes(raw)))
+            text = "\n".join(p.text for p in docxobj.paragraphs)
+        else:
+            for enc in ("utf-8", "windows-1251", "utf-16"):
+                try:
+                    text = bytes(raw).decode(enc)
+                    break
+                except (UnicodeDecodeError, LookupError):
+                    continue
+        text = (text or "").strip()
+        if not text:
+            await update.message.reply_text(
+                "Faylda matn topilmadi (skanerlangan PDF bo'lishi mumkin)."
+            )
+            return
 
         db = get_db()
         user_id = db.get_or_create_user(telegram_id=update.effective_user.id)
@@ -658,15 +785,32 @@ async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             if not conv or conv["user_id"] != user_id:
                 conv_id = None
         if conv_id is None:
-            conv_id = db.create_conversation(user_id, "📷 Rasm tahlili")
-        db.add_message(user_id, "user", "📷 Rasm yubordi", conversation_id=conv_id)
-        db.add_message(
-            user_id, "assistant", text, source="vision", conversation_id=conv_id
-        )
+            conv_id = db.create_conversation(user_id, f"📄 {doc.file_name}")
 
-        await update.message.reply_text(text, parse_mode="HTML")
-    finally:
-        os.unlink(path)
+        summary = text[:3000]
+        if len(text) > 3000:
+            summary += "\n...[fayl uzun, to'liq matn saqlandi]"
+        db.add_message(
+            user_id, "user", f"📄 Fayl: {doc.file_name}", conversation_id=conv_id
+        )
+        db.add_message(
+            user_id,
+            "assistant",
+            f"📄 <b>{doc.file_name}</b> yuklandi ({len(text)} ta belgi).\n\n"
+            f"<b>Xulosa:</b>\n{summary}",
+            source="document",
+            conversation_id=conv_id,
+        )
+        reply = (
+            f"📄 <b>{doc.file_name}</b> yuklandi — {len(text)} ta belgi.\n\n"
+            f"<b>Matn boshi:</b>\n{summary}"
+        )
+        if len(reply) > 4000:
+            reply = reply[:4000] + "..."
+        await update.message.reply_text(reply, parse_mode="HTML")
+    except Exception as e:
+        logging.warning("Fayl tahlili xato: %s", e)
+        await update.message.reply_text(f"Faylni o'qiy olmadim: {e}")
 
 
 def _build_app() -> Application:
@@ -707,11 +851,54 @@ def _build_app() -> Application:
     )
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_message))
     app.add_handler(MessageHandler(filters.PHOTO, on_photo))
+    app.add_handler(MessageHandler(filters.Document, on_document))
     app.add_handler(CallbackQueryHandler(on_callback))
     app.add_handler(CallbackQueryHandler(premium_callback, pattern=r"^premium:"))
     app.add_handler(PreCheckoutQueryHandler(pre_checkout))
     app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment))
+    _schedule_reminders(app)
     return app
+
+
+async def _remind_premium(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Premium muddati yaqinlashgan userlarga eslatma yuboradi (har 6 soat)."""
+    try:
+        from db import get_db
+
+        db = get_db()
+        for days in (3, 1):
+            for entry in db.users_expiring_soon(days):
+                uid = entry["id"]
+                kind = f"expiry:{days}"
+                if db.notification_sent(uid, kind):
+                    continue
+                tid = entry.get("telegram_id")
+                if not tid:
+                    continue
+                text = (
+                    f"⏳ <b>Premium muddati tugashiga {days} kun qoldi!</b>\n\n"
+                    f"Hisobingiz {days} kundan keyin Free rejimiga o'tadi.\n"
+                    "Tarifni yangilash uchun: @Inomjonai_bot ichida /premium yoki "
+                    "saytdagi 'Premium' tugmasi orqali to'lash mumkin."
+                )
+                try:
+                    await context.bot.send_message(
+                        chat_id=tid, text=text, parse_mode="HTML"
+                    )
+                    db.mark_notification(uid, kind)
+                except Exception as exc:
+                    logging.warning("Eslatma yuborilmadi (%s): %s", tid, exc)
+    except Exception as exc:
+        logging.warning("Eslatma job xato: %s", exc)
+
+
+def _schedule_reminders(app: Application) -> None:
+    """Har 6 soatda premium eslatma job'ini ro'yxatdan o'tkazadi."""
+    try:
+        app.job_queue.run_repeating(_remind_premium, interval=6 * 3600, first=3600)
+        logging.info("Premium eslatma job ishga tushdi")
+    except Exception as exc:
+        logging.warning("Eslatma job yaratilmadi: %s", exc)
 
 
 def start_bot_in_thread() -> None:

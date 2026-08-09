@@ -1,9 +1,13 @@
 """Faza 4: rasm tahlili — Pillow bilan, model/API siz.
 
 Formati, o'lchami, yorug'ligi, asosiy ranglari, EXIF (kamera, sana)
-va rasm/fotografiya ekanligi aniqlanadi.
+va rasm/fotografiya ekanligi aniqlanadi. Qo'shimcha: OCR (matn o'qish)
+Ollama vision model (llama3.2-vision) orqali.
 """
 
+import base64
+import os
+import urllib.request
 from collections import Counter
 
 from PIL import ExifTags, Image, ImageStat
@@ -92,3 +96,57 @@ def analyze(path: str) -> dict:
         "photo_like": photo_like,
         "exif": exif,
     }
+
+
+def ocr(path: str, timeout: float = 60.0) -> str:
+    """Suratdagi matnni o'qiydi (Ollama vision model orqali).
+
+    OLLAMA_BASE_URL (yoki _2.._8) serverlaridan birini sinaydi.
+    Topilmasa yoki xato bo'lsa — bo'sh qator qaytaradi.
+    """
+    try:
+        with open(path, "rb") as f:
+            b64 = base64.b64encode(f.read()).decode()
+    except Exception:
+        return ""
+
+    model = os.environ.get("OLLAMA_VISION_MODEL", "llama3.2-vision")
+    base_urls = [os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")]
+    for i in range(2, 9):
+        u = os.environ.get(f"OLLAMA_BASE_URL_{i}", "").strip()
+        if u:
+            base_urls.append(u)
+
+    prompt = (
+        "Bu suratdagi BARCHA matnni aniq o'qib chiq. "
+        "Faqat matnning o'zini qaytar, hech qanday izohsiz. "
+        "Agar matn bo'lmasa, 'matn topilmadi' deb yoz."
+    )
+    payload = {
+        "model": model,
+        "prompt": prompt,
+        "images": [b64],
+        "stream": False,
+        "options": {"temperature": 0},
+    }
+    body = bytes(
+        __import__("json").dumps(payload),
+        "utf-8",
+    )
+
+    for base_url in base_urls:
+        try:
+            req = urllib.request.Request(
+                base_url.rstrip("/") + "/api/generate",
+                data=body,
+                method="POST",
+                headers={"Content-Type": "application/json"},
+            )
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                data = __import__("json").loads(r.read().decode())
+            out = str(data.get("response", "")).strip()
+            if out and out.lower() != "matn topilmadi":
+                return out
+        except Exception:
+            continue
+    return ""
