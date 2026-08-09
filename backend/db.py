@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS users (
     email         TEXT,
     phone         TEXT,
     token         TEXT,
+    referal_code  TEXT UNIQUE,
     created_at    TEXT DEFAULT (datetime('now'))
 );
 
@@ -89,6 +90,31 @@ CREATE TABLE IF NOT EXISTS gen_history (
     prompt     TEXT,
     created_at TEXT DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS notes (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    INTEGER NOT NULL,
+    title      TEXT,
+    content    TEXT,
+    category   TEXT DEFAULT 'umumiy',
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS referrals (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    referrer_id INTEGER NOT NULL,
+    referred_id INTEGER NOT NULL UNIQUE,
+    created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS settings (
+    id      INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER UNIQUE,
+    lang    TEXT DEFAULT 'uz',
+    theme   TEXT DEFAULT 'dark',
+    updated_at TEXT DEFAULT (datetime('now'))
+);
 """
 
 _PG_DDL = [
@@ -104,6 +130,7 @@ _PG_DDL = [
         email         TEXT,
         phone         TEXT,
         token         TEXT,
+        referal_code  TEXT UNIQUE,
         created_at    TIMESTAMPTZ DEFAULT now()
     )
     """,
@@ -174,6 +201,34 @@ _PG_DDL = [
         url        TEXT NOT NULL,
         prompt     TEXT,
         created_at TIMESTAMPTZ DEFAULT now()
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS notes (
+        id         BIGSERIAL PRIMARY KEY,
+        user_id    BIGINT NOT NULL,
+        title      TEXT,
+        content    TEXT,
+        category   TEXT DEFAULT 'umumiy',
+        created_at TIMESTAMPTZ DEFAULT now(),
+        updated_at TIMESTAMPTZ DEFAULT now()
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS referrals (
+        id         BIGSERIAL PRIMARY KEY,
+        referrer_id BIGINT NOT NULL,
+        referred_id BIGINT NOT NULL UNIQUE,
+        created_at TIMESTAMPTZ DEFAULT now()
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS settings (
+        id      BIGSERIAL PRIMARY KEY,
+        user_id BIGINT UNIQUE,
+        lang    TEXT DEFAULT 'uz',
+        theme   TEXT DEFAULT 'dark',
+        updated_at TIMESTAMPTZ DEFAULT now()
     )
     """,
 ]
@@ -272,6 +327,7 @@ class Database:
                         "phone",
                         "token",
                         "client_id",
+                        "referal_code",
                     ):
                         cur.execute(
                             f"ALTER TABLE users ADD COLUMN IF NOT EXISTS {col} TEXT"
@@ -292,6 +348,7 @@ class Database:
                 "email",
                 "phone",
                 "token",
+                "referal_code",
             ):
                 if col not in user_cols:
                     self.conn.execute(f"ALTER TABLE users ADD COLUMN {col} TEXT")
@@ -346,7 +403,7 @@ class Database:
 
     def get_user(self, user_id: int) -> dict | None:
         row = self._row(
-            "SELECT id, username, name, surname, email, phone, token, client_id "
+            "SELECT id, username, name, surname, email, phone, token, client_id, referal_code "
             "FROM users WHERE id = ?",
             (user_id,),
         )
@@ -354,7 +411,7 @@ class Database:
 
     def get_user_by_token(self, token: str) -> dict | None:
         row = self._row(
-            "SELECT id, username, name, surname, email, phone, token, client_id, telegram_id "
+            "SELECT id, username, name, surname, email, phone, token, client_id, telegram_id, referal_code "
             "FROM users WHERE token = ?",
             (token,),
         )
@@ -782,6 +839,129 @@ class Database:
                 "SELECT * FROM gen_history WHERE user_id = ? ORDER BY created_at DESC LIMIT ?",
                 (user_id, limit),
             )
+        return [dict(r) for r in rows]
+
+    # ================= suhbat eksporti =================
+    def export_conversation(self, conversation_id: int, user_id: int) -> list | None:
+        conv = self._row(
+            "SELECT * FROM conversations WHERE id = ? AND user_id = ?",
+            (conversation_id, user_id),
+        )
+        if not conv:
+            return None
+        rows = self._rows(
+            "SELECT role, text, created_at FROM messages "
+            "WHERE conversation_id = ? ORDER BY id ASC",
+            (conversation_id,),
+        )
+        return {"title": conv["title"], "messages": [dict(r) for r in rows]}
+
+    # ================= notalar =================
+    def create_note(
+        self, user_id: int, title: str, content: str, category: str = "umumiy"
+    ) -> int:
+        return self._insert(
+            "INSERT INTO notes (user_id, title, content, category) VALUES (?, ?, ?, ?)",
+            (user_id, title, content, category),
+        )
+
+    def list_notes(self, user_id: int) -> list:
+        rows = self._rows(
+            "SELECT * FROM notes WHERE user_id = ? ORDER BY updated_at DESC",
+            (user_id,),
+        )
+        return [dict(r) for r in rows]
+
+    def get_note(self, note_id: int, user_id: int) -> dict | None:
+        row = self._row(
+            "SELECT * FROM notes WHERE id = ? AND user_id = ?", (note_id, user_id)
+        )
+        return dict(row) if row else None
+
+    def update_note(
+        self, note_id: int, user_id: int, title: str, content: str, category: str
+    ) -> bool:
+        self._execute(
+            "UPDATE notes SET title = ?, content = ?, category = ?, updated_at = datetime('now') "
+            "WHERE id = ? AND user_id = ?",
+            (title, content, category, note_id, user_id),
+        )
+        return self.get_note(note_id, user_id) is not None
+
+    def delete_note(self, note_id: int, user_id: int) -> None:
+        self._execute(
+            "DELETE FROM notes WHERE id = ? AND user_id = ?", (note_id, user_id)
+        )
+
+    # ================= sozlamalar (til/theme) =================
+    def get_settings(self, user_id: int) -> dict:
+        row = self._row(
+            "SELECT lang, theme FROM settings WHERE user_id = ?", (user_id,)
+        )
+        if row:
+            return dict(row)
+        return {"lang": "uz", "theme": "dark"}
+
+    def set_settings(self, user_id: int, lang: str, theme: str) -> None:
+        with self._lock:
+            row = self._row("SELECT id FROM settings WHERE user_id = ?", (user_id,))
+            if row:
+                self._execute(
+                    "UPDATE settings SET lang = ?, theme = ?, updated_at = datetime('now') WHERE user_id = ?",
+                    (lang, theme, user_id),
+                )
+            else:
+                self._insert(
+                    "INSERT INTO settings (user_id, lang, theme) VALUES (?, ?, ?)",
+                    (user_id, lang, theme),
+                )
+
+    # ================= referral =================
+    def gen_referal_code(self, user_id: int) -> str | None:
+        import random
+        import string
+
+        with self._lock:
+            row = self._row("SELECT referal_code FROM users WHERE id = ?", (user_id,))
+            if row and row["referal_code"]:
+                return row["referal_code"]
+            code = "".join(random.choices(string.ascii_uppercase + string.digits, k=8))
+            self._execute(
+                "UPDATE users SET referal_code = ? WHERE id = ?", (code, user_id)
+            )
+        return code
+
+    def get_user_by_referal_code(self, code: str) -> dict | None:
+        row = self._row(
+            "SELECT id FROM users WHERE referal_code = ?", (code.strip().upper(),)
+        )
+        return dict(row) if row else None
+
+    def apply_referral(self, referrer_id: int, referred_id: int) -> bool:
+        if referrer_id == referred_id:
+            return False
+        with self._lock:
+            exists = self._row(
+                "SELECT id FROM referrals WHERE referred_id = ?", (referred_id,)
+            )
+            if exists:
+                return False
+            # referrer ham mavjud bo'lishi kerak
+            if not self._row("SELECT id FROM users WHERE id = ?", (referrer_id,)):
+                return False
+            self._insert(
+                "INSERT INTO referrals (referrer_id, referred_id) VALUES (?, ?)",
+                (referrer_id, referred_id),
+            )
+        return True
+
+    def list_referrals(self, user_id: int) -> list:
+        rows = self._rows(
+            "SELECT r.id, r.created_at, u.username, u.name FROM referrals r "
+            "LEFT JOIN users u ON u.id = r.referred_id WHERE r.referrer_id = ? "
+            "ORDER BY r.created_at DESC",
+            (user_id,),
+        )
         return [dict(r) for r in rows]
 
 

@@ -1122,6 +1122,163 @@ def local_ai_pull(req: LocalAiPullRequest) -> JSONResponse:
     )
 
 
+# ================= Yangi funksiyalar: eksport, notalar, til, referal =================
+
+
+@app.get("/api/export")
+def export_conversation(token: str = "", conversation_id: int = 0) -> JSONResponse:
+    """Suhbatni TXT ko'rinishida eksport qilish (barchasi local)."""
+    db = get_db()
+    user = db.get_user_by_token(token) if token else None
+    if not user:
+        return JSONResponse({"error": "kirish talab qilinadi"}, status_code=401)
+    if not conversation_id:
+        return JSONResponse({"error": "conversation_id kerak"}, status_code=400)
+    data = db.export_conversation(conversation_id, user["id"])
+    if not data:
+        return JSONResponse({"error": "suhbat topilmadi"}, status_code=404)
+    lines = [f"# {data['title'] or 'Suhbat'}"]
+    for m in data["messages"]:
+        who = "Siz" if m["role"] == "user" else "Neura AI"
+        lines.append(f"\n[{who}] {m['text']}")
+    content = "\n".join(lines)
+    return JSONResponse({"ok": True, "title": data["title"], "text": content})
+
+
+class NoteRequest(BaseModel):
+    token: str = ""
+    title: str = ""
+    content: str = ""
+    category: str = "umumiy"
+    note_id: int = 0
+
+
+class NoteIdRequest(BaseModel):
+    token: str
+    note_id: int
+
+
+@app.get("/api/notes")
+def notes_list(token: str = "") -> JSONResponse:
+    db = get_db()
+    user = db.get_user_by_token(token) if token else None
+    if not user:
+        return JSONResponse({"error": "kirish talab qilinadi"}, status_code=401)
+    return JSONResponse({"notes": db.list_notes(user["id"])})
+
+
+@app.get("/api/notes/detail")
+def notes_detail(token: str = "", id: int = 0) -> JSONResponse:
+    db = get_db()
+    user = db.get_user_by_token(token) if token else None
+    if not user:
+        return JSONResponse({"error": "kirish talab qilinadi"}, status_code=401)
+    note = db.get_note(id, user["id"]) if id else None
+    if not note:
+        return JSONResponse({"error": "nota topilmadi"}, status_code=404)
+    return JSONResponse(note)
+
+
+@app.post("/api/notes/create")
+def notes_create(req: NoteRequest) -> JSONResponse:
+    db = get_db()
+    user = db.get_user_by_token(req.token) if req.token else None
+    if not user:
+        return JSONResponse({"error": "kirish talab qilinadi"}, status_code=401)
+    title = (req.title or "").strip()[:120] or "Noma'lum nota"
+    content = (req.content or "").strip()[:20000]
+    if not content:
+        return JSONResponse({"error": "matn kerak"}, status_code=400)
+    nid = db.create_note(
+        user["id"], title, content, (req.category or "umumiy").strip()[:40]
+    )
+    return JSONResponse({"ok": True, "id": nid})
+
+
+@app.post("/api/notes/update")
+def notes_update(req: NoteRequest) -> JSONResponse:
+    db = get_db()
+    user = db.get_user_by_token(req.token) if req.token else None
+    if not user:
+        return JSONResponse({"error": "kirish talab qilinadi"}, status_code=401)
+    ok = db.update_note(
+        req.note_id,
+        user["id"],
+        (req.title or "").strip()[:120] or "Nolat nota",
+        (req.content or "").strip()[:20000],
+        (req.category or "umumiy").strip()[:40],
+    )
+    if not ok:
+        return JSONResponse({"error": "nota topilmadi"}, status_code=404)
+    return JSONResponse({"ok": True})
+
+
+@app.post("/api/notes/delete")
+def notes_delete(req: NoteIdRequest) -> JSONResponse:
+    db = get_db()
+    user = db.get_user_by_token(req.token) if req.token else None
+    if not user:
+        return JSONResponse({"error": "kirish talab qilinadi"}, status_code=401)
+    db.delete_note(req.note_id, user["id"])
+    return JSONResponse({"ok": True})
+
+
+class SettingsRequest(BaseModel):
+    token: str
+    lang: str = "uz"
+    theme: str = "dark"
+
+
+@app.get("/api/settings")
+def settings_get(token: str = "") -> JSONResponse:
+    db = get_db()
+    user = db.get_user_by_token(token) if token else None
+    if not user:
+        return JSONResponse({"error": "kirish talab qilinadi"}, status_code=401)
+    return JSONResponse(db.get_settings(user["id"]))
+
+
+@app.post("/api/settings")
+def settings_set(req: SettingsRequest) -> JSONResponse:
+    db = get_db()
+    user = db.get_user_by_token(req.token) if req.token else None
+    if not user:
+        return JSONResponse({"error": "kirish talab qilinadi"}, status_code=401)
+    lang = req.lang if req.lang in ("uz", "ru", "en") else "uz"
+    theme = req.theme if req.theme in ("dark", "light") else "dark"
+    db.set_settings(user["id"], lang, theme)
+    return JSONResponse({"ok": True, "lang": lang, "theme": theme})
+
+
+@app.get("/api/referral")
+def referral_info(token: str = "") -> JSONResponse:
+    db = get_db()
+    user = db.get_user_by_token(token) if token else None
+    if not user:
+        return JSONResponse({"error": "kirish talab qilinadi"}, status_code=401)
+    code = db.gen_referal_code(user["id"])
+    return JSONResponse({"code": code, "referrals": db.list_referrals(user["id"])})
+
+
+class ReferralApply(BaseModel):
+    token: str
+    code: str
+
+
+@app.post("/api/referral/apply")
+def referral_apply(req: ReferralApply) -> JSONResponse:
+    db = get_db()
+    user = db.get_user_by_token(req.token) if req.token else None
+    if not user:
+        return JSONResponse({"error": "kirish talab qilinadi"}, status_code=401)
+    ref = db.get_user_by_referal_code(req.code)
+    if not ref:
+        return JSONResponse({"error": "kod topilmadi"}, status_code=404)
+    if db.apply_referral(ref["id"], user["id"]):
+        return JSONResponse({"ok": True})
+    return JSONResponse({"error": "allaqachon qo'llangan"}, status_code=400)
+
+
 # ================= Ulashish (share) =================
 
 
@@ -1648,6 +1805,7 @@ def me(token: str = "") -> JSONResponse:
             "email": user.get("email") or "",
             "phone": user.get("phone") or "",
             "telegram_id": user.get("telegram_id") or None,
+            "referal_code": user.get("referal_code") or "",
         }
     )
 

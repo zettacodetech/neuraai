@@ -469,6 +469,31 @@ async function send(text) {
     openAuth();
     return;
   }
+  // ============ Slash buyruqlar ============
+  if (text.startsWith("/note ")) {
+    const content = text.slice(6).trim();
+    if (content) {
+      const title = content.split("\n")[0].slice(0, 60) || "Nota";
+      try {
+        await api("/api/notes/create", { method: "POST", body: JSON.stringify({ token: me.token, title, content, category: "chat" }) });
+        toast(t("saved"));
+      } catch (e) { toast(e.message); }
+    }
+    input.value = "";
+    return;
+  }
+  if (text === "/notes") { loadNotes(); openModal("notesModal"); input.value = ""; return; }
+  if (text === "/export") {
+    if (currentConv) {
+      try {
+        const d = await api(`/api/export?token=${encodeURIComponent(me.token)}&conversation_id=${currentConv}`);
+        exportText.value = d.text || "";
+        openModal("exportModal");
+      } catch (e) { toast(e.message); }
+    }
+    input.value = "";
+    return;
+  }
   input.value = "";
   autoResize();
   sending = true;
@@ -798,6 +823,7 @@ function renderConvList(items) {
   items.forEach((c) => {
     const btn = document.createElement("div");
     btn.className = "conv-item" + (currentConv === c.id ? " active" : "");
+    btn.dataset.id = c.id;
     btn.innerHTML =
       '<span class="conv-ico"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>' +
       '<span class="conv-info"><span class="conv-title">' + esc(c.title) + "</span>" +
@@ -1044,6 +1070,14 @@ function applyTheme(t) {
 function toggleTheme() {
   const cur = document.documentElement.dataset.theme === "light" ? "dark" : "light";
   applyTheme(cur);
+  saveSettings();
+}
+
+function saveSettings() {
+  const token = localStorage.getItem("neura_token");
+  if (!token) return;
+  const theme = document.documentElement.dataset.theme === "light" ? "light" : "dark";
+  api("/api/settings", { method: "POST", body: JSON.stringify({ token, lang: currentLang || "uz", theme }) }).catch(() => {});
 }
 
 applyTheme(localStorage.getItem(THEME_KEY) || (window.matchMedia && matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark"));
@@ -1417,6 +1451,10 @@ async function boot() {
       renderUser();
       showChat();
       currentConv = null;
+      api("/api/settings?token=" + encodeURIComponent(token)).then((s) => {
+        if (s && s.lang) { currentLang = s.lang; applyLang(); }
+        if (s && s.theme) applyTheme(s.theme);
+      }).catch(() => {});
       await refreshConversations();
     } catch (e) {
       if (e.status === 401) {
@@ -1814,3 +1852,214 @@ document.addEventListener("click", (e) => {
     inp.placeholder = list[i];
   }, 3200);
 })();
+
+/* ================= Yangi: Til tanlash / i18n ================= */
+
+function toast(msg) {
+  let el = document.getElementById("toastBox");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "toastBox";
+    el.style.cssText = "position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:99999;max-width:86vw;padding:10px 16px;border-radius:12px;background:var(--accent,#7c5dfa);color:#fff;font-size:14px;box-shadow:0 6px 20px rgba(0,0,0,.25);opacity:0;transition:opacity .25s,transform .25s;pointer-events:none";
+    document.body.appendChild(el);
+  }
+  el.textContent = msg;
+  el.style.opacity = "1";
+  el.style.transform = "translateX(-50%) translateY(0)";
+  clearTimeout(el._t);
+  el._t = setTimeout(() => {
+    el.style.opacity = "0";
+    el.style.transform = "translateX(-50%) translateY(8px)";
+  }, 2400);
+}
+
+
+const I18N = {
+  uz: {
+    newChat: "Yangi suhbat", convs: "Suhbatlarim", empty: "Hali suhbatlar yo'q.",
+    empty2: "Birinchi savolingizni yozing!", search: "Qidiruv", gallery: "Galereya",
+    share: "Ulashish", export: "Eksport", notes: "Notalar", lang: "Til",
+    theme: "Tema", about: "InomjonAI haqida", login: "Kirish", online: "Onlayn",
+    apk: "APK", exportModal: "Suhbatni eksport qilish", copy: "Nusxalash",
+    download: "Yuklab olish (.txt)", saved: "Saqlangan", del: "O'chirish",
+    save: "Saqlash", noNotes: "Notalar yo'q", noteTitle: "Nota sarlavhasi...",
+    noteContent: "Nota matni...", cat: "Kategoriya (ixtiyoriy)",
+  },
+  ru: {
+    new_yangi: "Новый чат", convs: "Мои чаты", empty: "Чатов пока нет.",
+    q2: "Напишите первый вопрос!", search: "Поиск", export: "Экспорт",
+    notes: "Заметки", lang: "Язык", theme: "Тема", about: "О InomjonAI",
+    login: "Вход", online: "Онлайн", apk: "APK", exportModal: "Экспорт чата",
+    copy: "Копировать", download: "Скачать (.txt)", saved: "Сохранено",
+    del: "Удалить", save: "Сохранить", noNotes: "Нет заметок",
+    noteTitle: "Заголовок заметки...", noteText: "Текст заметки...",
+    cat: "Категория (необязательно)", share: "Поделиться",
+  },
+  en: {
+    newChat: "New chat", convs: "My chats", empty: "No chats yet.",
+    search: "Search", export: "Export", notes: "Notes", lang: "Language",
+    theme: "Theme", about: "About InomjonAI", login: "Log in", online: "Online",
+    apk: "APK", exportModal: "Export conversation", copy: "Copy",
+    download: "Download (.txt)", saved: "Saved", del: "Delete",
+    save: "Save", noNotes: "No notes", share: "Share",
+  },
+};
+
+let currentLang = localStorage.getItem("neura_lang") || "uz";
+function t(key) {
+  const d = I18N[currentLang] || I18N.uz;
+  return d[key] !== undefined ? d[key] : (I18N.uz[key] !== undefined ? I18N.uz[key] : key);
+}
+function applyLang() {
+  localStorage.setItem("neura_lang", currentLang);
+  const label = document.getElementById("langLabel");
+  if (label) label.textContent = currentLang.toUpperCase();
+  const map = { searchBtn: "search", exportBtn: "export", notesBtn: "notes", shareBtn: "share" };
+  for (const [id, key] of Object.entries(map)) {
+    const btn = document.getElementById(id);
+    if (!btn) continue;
+    const span = btn.querySelector("span:last-child");
+    if (span) span.textContent = t(key);
+  }
+}
+
+document.addEventListener("click", (e) => {
+  const b = e.target.closest("[data-lang]");
+  if (b) { currentLang = b.dataset.lang; applyLang(); saveSettings(); closeModal("langModal"); }
+});
+const langBtn = document.getElementById("langBtn");
+if (langBtn) langBtn.addEventListener("click", () => openModal("langModal"));
+
+/* ================= Yangi: Eksport ================= */
+
+const exportBtn = document.getElementById("exportBtn");
+const exportText = document.getElementById("exportText");
+if (exportBtn) exportBtn.addEventListener("click", async () => {
+  if (!localStorage.getItem("neura_token")) return;
+  const convId = currentConv || 0;
+  if (!convId) { toast("Avval suhbat oching"); return; }
+  try {
+    const d = await api(`/api/export?token=${encodeURIComponent(localStorage.getItem("neura_token"))}&conversation_id=${convId}`);
+    exportText.value = d.text || "";
+    openModal("exportModal");
+  } catch (err) { toast(err.message); }
+});
+const exportCopyBtn = document.getElementById("exportCopyBtn");
+if (exportCopyBtn) exportCopyBtn.addEventListener("click", () => {
+  navigator.clipboard.writeText(exportText.value || "").then(() => toast(t("saved"))).catch(() => {});
+});
+const exportDownloadBtn = document.getElementById("exportDownloadBtn");
+if (exportDownloadBtn) exportDownloadBtn.addEventListener("click", () => {
+  const blob = new Blob([exportText.value || ""], { type: "text/plain" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = "neura-suhbat.txt"; a.click();
+  URL.revokeObjectURL(a.href);
+});
+
+function getActiveConvId() {
+  const active = document.querySelector(".conv-item.active");
+  return active ? (active.dataset.id || active.dataset.conv || "") : "";
+}
+
+/* ================= Notalar ================= */
+
+const notesBtn = document.getElementById("notesBtn");
+if (notesBtn) notesBtn.addEventListener("click", () => { loadNotes(); openModal("notesModal"); });
+async function loadNotes() {
+  const list = document.getElementById("notesList");
+  if (!list) return;
+  try {
+    const d = await api(`/api/notes?token=${encodeURIComponent(localStorage.getItem("neura_token") || "")}`);
+    list.innerHTML = "";
+    if (!d.notes || d.notes.length === 0) {
+      list.innerHTML = '<div class="search-empty">' + t("noNotes") + '</div>';
+      return;
+    }
+    d.notes.forEach(n => {
+      const el = document.createElement("div");
+      el.className = "note-item";
+      el.style.cssText = "padding:8px 10px;border-radius:10px;background:var(--accent-soft,rgba(124,93,250,.12));margin-bottom:6px;cursor:pointer";
+      el.innerHTML = `<b>${esc(n.title)}</b><small style="display:block;color:#90a">${esc(n.category || "")} · ${fmtDate(n.created_at || n.updated_at || "")}</small>`;
+      el.onclick = () => {
+        loadNote(n.id);
+      };
+      list.appendChild(el);
+    });
+  } catch (e) { if (list) list.innerHTML = '<div class="search-empty">' + esc(e.message) + '</div>'; }
+}
+async function loadNote(id) {
+  try {
+    const d = await api(`/api/notes/detail?token=${encodeURIComponent(localStorage.getItem("neura_token") || "")}&id=${id}`);
+    notHelper.prefill(d);
+  } catch (e) { toast(e.message); }
+}
+const noteTitle = document.getElementById("noteTitle"), noteContent = document.getElementById("noteContent"),
+      noteCat = document.getElementById("noteCategory"), noteId = document.getElementById("noteId");
+const notHelper = {
+  prefill(d) { noteId.value = d.id; noteTitle.value = d.title; noteContent.value = d.content; noteCat.value = d.category || ""; },
+};
+const noteSaveBtn = document.getElementById("noteSaveBtn");
+if (noteSaveBtn) noteSaveBtn.addEventListener("click", async () => {
+  const body = { token: localStorage.getItem("neura_token") || "", title: noteTitle.value, content: noteContent.value, category: noteCat.value, note_id: parseInt(noteId.value || 0) };
+  try {
+    const d = parseInt(noteId.value || 0) ? await api("/api/notes/update", { method: "POST", body: JSON.stringify(body) }) : await api("/api/notes/create", { method: "POST", body: JSON.stringify(body) });
+    toast(t("saved")); if (d) { noteId.value = "0"; noteTitle.value = ""; noteContent.value = ""; noteCat.value = ""; loadNotes(); }
+  } catch (e) { toast(e.message); }
+});
+const noteDelBtn = document.getElementById("noteDelBtn");
+if (noteDelBtn) noteDelBtn.addEventListener("click", async () => {
+  if (!noteId.value || noteId.value === "0") return;
+  try {
+    await api("/api/notes/delete", { method: "POST", body: JSON.stringify({ token: localStorage.getItem("neura_token") || "", note_id: parseInt(noteId.value) }) });
+    noteId.value = "0"; noteTitle.value = ""; noteContent.value = ""; noteCat.value = "";
+    loadNotes(); toast(t("del"));
+  } catch (e) { toast(e.message); }
+});
+
+/* ================= Soz hammasi: til+chap localStorage'dan ================= */
+(function initExtras() {
+  applyLang();
+})();
+
+/* ================= Referal ================= */
+
+const referalBtn = document.getElementById("referalBtn");
+const referalModal = document.getElementById("referalModal");
+if (referalBtn) referalBtn.addEventListener("click", async () => {
+  if (!me) { openAuth(); return; }
+  openModal("referalModal");
+  const codeInput = document.getElementById("referalCode");
+  const listBox = document.getElementById("referalList");
+  try {
+    const d = await api("/api/referral?token=" + encodeURIComponent(me.token));
+    if (codeInput) codeInput.value = d.code || "";
+    if (listBox) {
+      if (!d.referrals || d.referrals.length === 0) {
+        listBox.innerHTML = '<div class="search-empty">Hali referallar yo\'q. Kodni ulashing!</div>';
+      } else {
+        listBox.innerHTML = "";
+        d.referrals.forEach((r) => {
+          const el = document.createElement("div");
+          el.style.cssText = "padding:8px 10px;border-radius:10px;background:var(--accent-soft,rgba(124,93,250,.12));margin-bottom:6px;font-size:13px";
+          el.textContent = (r.username || r.telegram_id || r.id) + " · " + (r.created_at || "");
+          listBox.appendChild(el);
+        });
+      }
+    }
+  } catch (e) { if (codeInput) codeInput.value = ""; if (listBox) listBox.innerHTML = '<div class="search-empty">' + esc(e.message) + '</div>'; }
+});
+const referalCopyBtn = document.getElementById("referalCopyBtn");
+if (referalCopyBtn) referalCopyBtn.addEventListener("click", () => {
+  const c = document.getElementById("referalCode");
+  if (c && c.value) navigator.clipboard.writeText(c.value).then(() => toast(t("saved"))).catch(() => {});
+});
+const referalApplyBtn = document.getElementById("referalApplyBtn");
+if (referalApplyBtn) referalApplyBtn.addEventListener("click", async () => {
+  const code = (document.getElementById("referalApplyInput") || {}).value || "";
+  if (!code.trim()) return;
+  try {
+    await api("/api/referral/apply", { method: "POST", body: JSON.stringify({ token: me.token, code: code.trim() }) });
+    toast(t("saved"));
+    document.getElementById("referalApplyInput").value = "";
+  } catch (e) { toast(e.message); }
+});
