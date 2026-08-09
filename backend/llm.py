@@ -43,7 +43,13 @@ DEFAULT_COHERE_MODEL = "command-a-plus-05-2026"
 # Mavjud Gemini modellar (Google API da) — eng kuchlisi birinchi:
 # https://ai.google.dev/gemini-api/docs/models/gemini
 GEMINI_MODELS = [
+    "gemini-2.5-pro",  # Eng kuchli Pro (2025)
+    "gemini-2.5-pro-preview",  # Pro preview (2026)
     "gemini-2.5-flash",  # Eng so'nggi, tez va kuchli (2025)
+    "gemini-2.5-flash-lite",  # Flash Lite — tez va arzon (2025)
+    "gemini-2.5-flash-preview",  # Yaqindagi Flash preview (2025/2026)
+    "gemini-2.0-flash",  # Ikkinchi avlod Flash (2024/2025)
+    "gemini-2.0-flash-lite",  # Ikkinchi avlod Flash Lite (2025)
     "gemini-flash-latest",  # Yangi alias (Google hujjatidan)
     "gemini-1.5-pro",  # Eng kuchli, murakkab vazifalar uchun
     "gemini-1.5-pro-002",  # Yangilangan Pro (sentyabr 2024)
@@ -548,7 +554,19 @@ def _build_providers() -> list:
         providers.sort(key=lambda p: _base(p) != POLLINATIONS_BASE_URL)
     elif mode == "cohere":
         providers.sort(key=lambda p: _base(p) != COHERE_BASE_URL)
-    # auto: DDG → OpenRouter → KIE → Gemini → Pollinations → Ollama → Cohere → Groq
+    # auto/optimal: Groq → Gemini → OpenRouter → KIE → Cohere → Pollinations → Ollama → DDG
+    # (Groq va Gemini eng barqaror — ular oldin sinanadi)
+    _prior = lambda p: (
+        0 if _base(p) == GROQ_BASE_URL else 1 if isinstance(p, _GeminiProvider) else 2
+    )
+    providers.sort(
+        key=lambda p: (
+            _prior(p),
+            _base(p) == OPENROUTER_BASE_URL,
+            (not isinstance(p, _OllamaProvider)),
+            isinstance(p, _DuckDuckGoProvider),
+        )
+    )
     return providers
 
 
@@ -590,6 +608,7 @@ def llm_chat(
     if not LLM_PROVIDERS:
         return None
     chain = LLM_PROVIDERS
+    _rank_fn = None
     if model:
         if model.strip().lower() in ("local", "lokal", "offline", "ollama"):
             # Lokal rejim — faqat Ollama ishlatiladi
@@ -605,22 +624,30 @@ def llm_chat(
                     return 0
                 return 1
 
-            chain = sorted(chain, key=_rank)
+            _rank_fn = _rank
+            chain = sorted(chain, key=_rank_fn)
     last_error: Exception | None = None
     for provider in chain:
         if not provider.available:
             continue
         try:
+            # Model override faqat shu providerning o'z model nomiga
+            # mos kelsagina amal qiladi (masalan "fast" → NEURA_FAST_MODEL
+            # ga aylantirilgan haqiqiy nom). "auto"/begona nom singari
+            # nomlarda har bir provider o'z standart modelini ishlatadi.
+            use_model = model
+            if model and _rank_fn is not None and _rank_fn(provider) != 0:
+                use_model = None
             if hasattr(provider, "chat") and callable(provider.chat):
                 # Ollama / Gemini / DDG — o'z API formatiga ega
                 saved_model = getattr(provider, "model", None)
-                if model and model.strip().lower() not in (
+                if use_model and use_model.strip().lower() not in (
                     "local",
                     "lokal",
                     "offline",
                     "ollama",
                 ):
-                    provider.model = model  # type: ignore[attr-defined]
+                    provider.model = use_model  # type: ignore[attr-defined]
                 try:
                     content = provider.chat(
                         messages, temperature=temperature, max_tokens=max_tokens
@@ -637,7 +664,7 @@ def llm_chat(
                 )
                 body = json.dumps(
                     {
-                        "model": model or provider.model,
+                        "model": use_model or provider.model,
                         "messages": messages,
                         "temperature": temperature,
                         "max_completion_tokens": limit,
@@ -680,6 +707,7 @@ def llm_chat_stream(
     if not LLM_PROVIDERS:
         return
     chain = LLM_PROVIDERS
+    _rank_fn = None
     if model:
         if model.strip().lower() in ("local", "lokal", "offline", "ollama"):
             # Lokal rejim — faqat Ollama ishlatiladi (klaster round-robin)
@@ -696,18 +724,22 @@ def llm_chat_stream(
                     return 0
                 return 1
 
-            chain = sorted(chain, key=_rank)
+            _rank_fn = _rank
+            chain = sorted(chain, key=_rank_fn)
     for provider in chain:
         if not provider.available:
             continue
         saved_model = getattr(provider, "model", None)
-        if model and model.strip().lower() not in (
+        use_model = model
+        if model and _rank_fn is not None and _rank_fn(provider) != 0:
+            use_model = None
+        if use_model and use_model.strip().lower() not in (
             "local",
             "lokal",
             "offline",
             "ollama",
         ):
-            provider.model = model  # type: ignore[attr-defined]
+            provider.model = use_model  # type: ignore[attr-defined]
         try:
             got = False
             if hasattr(provider, "stream") and callable(provider.stream):
