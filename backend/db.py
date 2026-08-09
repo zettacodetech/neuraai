@@ -368,6 +368,9 @@ class Database:
                     cur.execute(
                         "ALTER TABLE users ADD COLUMN IF NOT EXISTS premium_until TIMESTAMPTZ"
                     )
+                    cur.execute(
+                        "ALTER TABLE users ADD COLUMN IF NOT EXISTS premium_plan TEXT"
+                    )
                     for col in ("name", "models"):
                         cur.execute(
                             f"ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS {col} TEXT"
@@ -395,6 +398,8 @@ class Database:
                     self.conn.execute(f"ALTER TABLE users ADD COLUMN {col} TEXT")
             if "premium_until" not in user_cols:
                 self.conn.execute("ALTER TABLE users ADD COLUMN premium_until TEXT")
+            if "premium_plan" not in user_cols:
+                self.conn.execute("ALTER TABLE users ADD COLUMN premium_plan TEXT")
             conv_cols = [
                 r[1] for r in self.conn.execute("PRAGMA table_info(conversations)")
             ]
@@ -486,7 +491,12 @@ class Database:
         row = self._row("SELECT premium_until FROM users WHERE id = ?", (user_id,))
         return self._row_get(row, "premium_until")
 
-    def add_premium_days(self, user_id: int, days: int) -> str:
+    def get_premium_plan(self, user_id: int) -> str:
+        """Foydalanuvchi oxirgi tanlagan tarifi (free/go/pro/ultra)."""
+        row = self._row("SELECT premium_plan FROM users WHERE id = ?", (user_id,))
+        return self._row_get(row, "premium_plan") or "free"
+
+    def add_premium_days(self, user_id: int, days: int, plan: str = "pro") -> str:
         """Premiumga kun qo'shadi; yangi premium_until qaytaradi."""
         from datetime import datetime, timedelta
 
@@ -505,13 +515,13 @@ class Database:
         new_until = base + timedelta(days=days)
         if self.pg:
             self._execute(
-                "UPDATE users SET premium_until = %s WHERE id = %s",
-                (new_until, user_id),
+                "UPDATE users SET premium_until = %s, premium_plan = %s WHERE id = %s",
+                (new_until, plan, user_id),
             )
         else:
             self._execute(
-                "UPDATE users SET premium_until = ? WHERE id = ?",
-                (new_until.isoformat(), user_id),
+                "UPDATE users SET premium_until = ?, premium_plan = ? WHERE id = ?",
+                (new_until.isoformat(), plan, user_id),
             )
         return new_until.isoformat()
 

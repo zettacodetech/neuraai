@@ -239,10 +239,12 @@
         if (premiumEl) {
           if (u.premium) {
             const until = (u.premium_until || "").slice(0, 10);
-            premiumEl.innerHTML = "👑 Premium faol" + (until ? " — " + until + " gacha" : "") + " 🎉";
+            const tierNames = { go: "Go", pro: "Pro", ultra: "Ultra" };
+            const tier = tierNames[u.premium_plan] || "Premium";
+            premiumEl.innerHTML = "👑 " + tier + " — faol" + (until ? " (" + until + " gacha)" : "") + " 🎉";
             document.getElementById("premiumBtn").innerHTML = "<span>⭐ Premiumni uzaytirish</span>";
           } else {
-            premiumEl.innerHTML = "Premium yoqilmagan";
+            premiumEl.innerHTML = "Tarif: Free (bepul)";
           }
         }
         try {

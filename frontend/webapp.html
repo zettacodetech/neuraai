@@ -82,16 +82,21 @@
 
     <section id="tab-premium">
       <div class="wa-card">
-        <h3>👑 Premium rejalar</h3>
+        <h3>👑 Premium tariflar</h3>
         <p class="wa-note" style="margin-top:0">To'lov bitta usulda — Telegram Stars. Premium barcha platformalarda (bot, sayt, ilova, CLI) ishlaydi.</p>
-        <div class="plan-grid" id="planGrid">
-          <div class="plan" data-plan="1m"><div><b>1 oy</b><br /><span>Har kuni 30 kun</span></div><div class="price">150 ⭐</div></div>
-          <div class="plan" data-plan="3m"><div><b>3 oy</b><br /><span>O'yiga 133 ⭐ (arzon)</span></div><div class="price">400 ⭐</div></div>
-          <div class="plan" data-plan="12m"><div><b>12 oy</b><br /><span>O'yiga 117 ⭐ (eng qulay)</span></div><div class="price">1400 ⭐</div></div>
+        <div style="display:flex;gap:8px;margin-bottom:14px">
+          <button class="wa-tab active" id="billMonthly" style="flex:1">Oylik</button>
+          <button class="wa-tab" id="billYearly" style="flex:1">Yillik 🎁</button>
         </div>
+        <div class="plan-grid" id="planGrid">
+          <div class="plan" data-plan="go_m"><div><b>🚀 Go</b><br /><span>Tez model, 100 rasm/oy</span></div><div class="price">150 ⭐/oy</div></div>
+          <div class="plan" data-plan="pro_m"><div><b>⚡ Pro</b><br /><span>Cheksiz rasm/video/musiqa</span></div><div class="price">400 ⭐/oy</div></div>
+          <div class="plan" data-plan="ultra_m"><div><b>👑 Ultra</b><br /><span>Eng kuchli model + hammasi</span></div><div class="price">1400 ⭐/oy</div></div>
+        </div>
+        <p class="wa-note">🆓 <b>Free</b> — 0 ⭐: asosiy suhbat, kod yozish, 10 rasm/oy. <br />🎁 <b>Yillik</b> — Pro/Ultra'da har 6 oyda 1 oy <b>bepul</b> (+2 oy).</p>
       </div>
       <button class="wa-btn" id="payBtn">⭐ To'lovni boshlash</button>
-      <p class="wa-note">To'lov tugmasi bosilganda Telegram to'lov oynasi ochiladi. To'lov tugagach premium avtomatik yoqiladi.</p>
+      <p class="wa-note">To'lov tugmasi bosilganda Telegram to'lov oynasi ochiladi. To'lov tugagach tarif avtomatik yoqiladi.</p>
     </section>
 
     <section id="tab-profile" style="display:none">
@@ -232,7 +237,32 @@
       });
     }
 
-    let selectedPlan = "1m";
+    let selectedPlan = "go_m";
+    let billing = "m";
+    const YEARLY = { go_m: "go_y", pro_m: "pro_y", ultra_m: "ultra_y" };
+    const YEARLY_PRICES = "Go — 1500 ⭐/yil (+1 oy bepul)||Pro — 4000 ⭐/yil (+2 oy bepul)||Ultra — 14000 ⭐/yil (+2 oy bepul)".split("||");
+    const MONTHLY_PRICES = "Go — 150 ⭐/oy||Pro — 400 ⭐/oy||Ultra — 1400 ⭐/oy".split("||");
+
+    function setBilling(mode) {
+      billing = mode;
+      $("billMonthly").classList.toggle("active", mode === "m");
+      $("billYearly").classList.toggle("active", mode === "y");
+      document.querySelectorAll(".plan").forEach((p) => {
+        const monthly = p.dataset.plan;
+        p.dataset.plan = mode === "m" ? monthly.replace(/_y$/, "_m") : (YEARLY[monthly] || monthly);
+        const idx = ["go", "pro", "ultra"].indexOf(monthly.split("_")[0]);
+        p.querySelector(".price").textContent = mode === "m" ? MONTHLY_PRICES[idx] : YEARLY_PRICES[idx];
+      });
+      const active = document.querySelector(".plan.selected");
+      selectedPlan = active ? active.dataset.plan : (mode === "m" ? "go_m" : "go_y");
+      document.querySelectorAll(".plan").forEach((p) => {
+        if (p.dataset.plan === selectedPlan) p.classList.add("selected");
+        else p.classList.remove("selected");
+      });
+    }
+    $("billMonthly").onclick = () => setBilling("m");
+    $("billYearly").onclick = () => setBilling("y");
+
     document.querySelectorAll(".plan").forEach((p) => {
       if (p.dataset.plan === selectedPlan) p.classList.add("selected");
       p.onclick = () => {

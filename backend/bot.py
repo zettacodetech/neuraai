@@ -65,21 +65,37 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         db = get_db()
         user_id = db.get_or_create_user(telegram_id=update.effective_user.id)
         until = db.get_premium_until(user_id)
+        tier = db.get_premium_plan(user_id)
         kb = InlineKeyboardMarkup(
             [
-                [InlineKeyboardButton("⭐ 1 oy — 150 ⭐", callback_data="premium:1m")],
-                [InlineKeyboardButton("⭐ 3 oy — 400 ⭐", callback_data="premium:3m")],
                 [
                     InlineKeyboardButton(
-                        "⭐ 12 oy — 1400 ⭐", callback_data="premium:12m"
-                    )
+                        "🚀 Go — 150 ⭐/oy", callback_data="premium:go_m"
+                    ),
+                    InlineKeyboardButton(
+                        "🚀 Go — 1500 ⭐/yil", callback_data="premium:go_y"
+                    ),
+                ],
+                [
+                    InlineKeyboardButton(
+                        "⚡ Pro — 400 ⭐/oy", callback_data="premium:pro_m"
+                    ),
+                    InlineKeyboardButton(
+                        "⚡ Pro — 4000 ⭐/yil", callback_data="premium:pro_y"
+                    ),
+                ],
+                [
+                    InlineKeyboardButton(
+                        "👑 Ultra — 1400 ⭐/oy", callback_data="premium:ultra_m"
+                    ),
+                    InlineKeyboardButton(
+                        "👑 Ultra — 14000 ⭐/yil", callback_data="premium:ultra_y"
+                    ),
                 ],
             ]
         )
         await update.message.reply_text(
-            "👑 <b>Inomjon AI Premium</b>\n\n"
-            "⭐ 1 oy — 150 ⭐\n⭐ 3 oy — 400 ⭐\n⭐ 12 oy — 1400 ⭐\n\n"
-            f"Holat: <b>{_premium_text(until)}</b>\n\n"
+            TIERS_INFO + "\n\n" + f"Holat: <b>{_premium_text(until, tier)}</b>\n\n"
             "Rejani tanlang — to'lov Telegram Stars orqali:",
             parse_mode="HTML",
             reply_markup=kb,
@@ -328,62 +344,92 @@ async def cancel_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
 
 # ================= Premium / Telegram Stars to'lov =================
-# Rejalar (Telegram Stars):
-#   1 oy  — 150 ⭐
-#   3 oy  — 400 ⭐ (oyiga ~133)
-#   12 oy — 1400 ⭐ (oyiga ~117)
+# 4 tarif: Free (bepul), Go, Pro, Ultra
+# Har tarif OYLIK yoki YILLIK variantda.
+# Pro yillik: har 6 oyda 1 oy bepul => 12 oy to'lov, 14 oy premium
 PLANS = {
-    "1m": {"title": "1 oy Premium", "stars": 150, "days": 30},
-    "3m": {"title": "3 oy Premium", "stars": 400, "days": 90},
-    "12m": {"title": "12 oy Premium", "stars": 1400, "days": 365},
+    "go_m": {"title": "Go — 1 oy", "stars": 150, "days": 30, "tier": "go"},
+    "go_y": {"title": "Go — 1 yil", "stars": 1500, "days": 365, "tier": "go"},
+    "pro_m": {"title": "Pro — 1 oy", "stars": 400, "days": 30, "tier": "pro"},
+    "pro_y": {
+        "title": "Pro — 1 yil (+2 oy bepul)",
+        "stars": 4000,
+        "days": 425,
+        "tier": "pro",
+    },
+    "ultra_m": {"title": "Ultra — 1 oy", "stars": 1400, "days": 30, "tier": "ultra"},
+    "ultra_y": {
+        "title": "Ultra — 1 yil (+2 oy bepul)",
+        "stars": 14000,
+        "days": 425,
+        "tier": "ultra",
+    },
 }
+TIER_STARS = {"go": 150, "pro": 400, "ultra": 1400}
+TIER_DAYS = {"go": 30, "pro": 30, "ultra": 30}
 
 STAR_CURRENCY = "XTR"
 
+TIERS_INFO = (
+    "👑 <b>Inomjon AI — Premium tariflar</b>\n\n"
+    "🆓 <b>Free</b> — 0 ⭐\n"
+    "• Asosiy suhbat va kod yozish\n"
+    "• 10 ta rasm oyiga\n\n"
+    "🚀 <b>Go</b> — 150 ⭐/oy | 1500 ⭐/yil\n"
+    "• Tez model (fast)\n"
+    "• 100 ta rasm oyiga\n\n"
+    "⚡ <b>Pro</b> — 400 ⭐/oy | 4000 ⭐/yil\n"
+    "• Cheksiz rasm, video, musiqa\n"
+    "• Kengaytirilgan internet qidiruv\n"
+    "🎁 <i>Yillik: har 6 oyda 1 oy bepul!</i>\n\n"
+    "👑 <b>Ultra</b> — 1400 ⭐/oy | 14000 ⭐/yil\n"
+    "• Eng kuchli model + hammasi\n"
+    "🎁 <i>Yillik: har 6 oyda 1 oy bepul!</i>"
+)
 
-def _premium_text(until: str | None) -> str:
+
+def _premium_text(until: str | None, tier: str = "free") -> str:
     if not until:
-        return "Premium yoqilmagan."
-    return f"Premium faol — {until[:10]} gacha."
+        return "Tarif: Free (bepul)."
+    label = {"go": "Go", "pro": "Pro", "ultra": "Ultra"}.get(tier, "Premium")
+    return f"Tarif: <b>{label}</b> — {until[:10]} gacha."
 
 
 async def premium_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     db = get_db()
     user_id = db.get_or_create_user(telegram_id=update.effective_user.id)
     until = db.get_premium_until(user_id)
+    tier = db.get_premium_plan(user_id)
     kb = InlineKeyboardMarkup(
         [
             [
                 InlineKeyboardButton(
-                    f"⭐ 1 oy — {PLANS['1m']['stars']} ⭐",
-                    callback_data="premium:1m",
-                )
+                    f"🚀 Go — 150 ⭐/oy", callback_data="premium:go_m"
+                ),
+                InlineKeyboardButton(
+                    f"🚀 Go — 1500 ⭐/yil", callback_data="premium:go_y"
+                ),
             ],
             [
                 InlineKeyboardButton(
-                    f"⭐ 3 oy — {PLANS['3m']['stars']} ⭐ (o'yiga arzon)",
-                    callback_data="premium:3m",
-                )
+                    "⚡ Pro — 400 ⭐/oy", callback_data="premium:pro_m"
+                ),
+                InlineKeyboardButton(
+                    "⚡ Pro — 4000 ⭐/yil", callback_data="premium:pro_y"
+                ),
             ],
             [
                 InlineKeyboardButton(
-                    f"⭐ 12 oy — {PLANS['12m']['stars']} ⭐ (eng qulay)",
-                    callback_data="premium:12m",
-                )
+                    "👑 Ultra — 1400 ⭐/oy", callback_data="premium:ultra_m"
+                ),
+                InlineKeyboardButton(
+                    "👑 Ultra — 14000 ⭐/yil", callback_data="premium:ultra_y"
+                ),
             ],
         ]
     )
     await update.message.reply_text(
-        "👑 <b>Inomjon AI Premium</b>\n\n"
-        "⭐ 1 oy — 150 ⭐\n"
-        "⭐ 3 oy — 400 ⭐\n"
-        "⭐ 12 oy — 1400 ⭐\n\n"
-        f"Holat: <b>{_premium_text(until)}</b>\n\n"
-        "Premium imkoniyatlari:\n"
-        "• 🚀 Tez va kuchli model (LLM)\n"
-        "• 🎨 Cheksiz rasm yaratish\n"
-        "• 🎬 Video / musiqa yaratish\n"
-        "• 🌐 Kengaytirilgan internet qidiruv\n\n"
+        TIERS_INFO + "\n\n" + f"Holat: <b>{_premium_text(until, tier)}</b>\n\n"
         "Rejani tanlang — to'lov Telegram Stars orqali:",
         parse_mode="HTML",
         reply_markup=kb,
@@ -456,7 +502,7 @@ async def successful_payment(
         return
     db = get_db()
     user_id = db.get_or_create_user(telegram_id=paid_tg_id)
-    until = db.add_premium_days(user_id, plan["days"])
+    until = db.add_premium_days(user_id, plan["days"], plan=plan["tier"])
     db.add_payment(
         user_id,
         amount=payment.total_amount,
