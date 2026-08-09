@@ -22,13 +22,19 @@ if os.path.exists(_ENV_PATH):
                 _k, _v = _line.split("=", 1)
                 os.environ.setdefault(_k.strip(), _v.strip())
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import (
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    LabeledPrice,
+    Update,
+)
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
     CommandHandler,
     ContextTypes,
     MessageHandler,
+    PreCheckoutQueryHandler,
     filters,
 )
 
@@ -97,6 +103,146 @@ async def new_chat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     current_conv.pop(uid, None)
     await update.message.reply_text(
         "✨ Yangi suhbat boshlanmoqda. Savolingizni yozing!"
+    )
+
+
+# ================= Premium / Telegram Stars to'lov =================
+# Rejalar (Telegram Stars):
+#   1 oy  — 150 ⭐
+#   3 oy  — 400 ⭐ (oyiga ~133)
+#   12 oy — 1400 ⭐ (oyiga ~117)
+PLANS = {
+    "1m": {"title": "1 oy Premium", "stars": 150, "days": 30},
+    "3m": {"title": "3 oy Premium", "stars": 400, "days": 90},
+    "12m": {"title": "12 oy Premium", "stars": 1400, "days": 365},
+}
+
+STAR_CURRENCY = "XTR"
+
+
+def _premium_text(until: str | None) -> str:
+    if not until:
+        return "Premium yoqilmagan."
+    return f"Premium faol — {until[:10]} gacha."
+
+
+async def premium_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    db = get_db()
+    user_id = db.get_or_create_user(telegram_id=update.effective_user.id)
+    until = db.get_premium_until(user_id)
+    kb = InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(
+                    f"⭐ 1 oy — {PLANS['1m']['stars']} ⭐",
+                    callback_data="premium:1m",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    f"⭐ 3 oy — {PLANS['3m']['stars']} ⭐ (o'yiga arzon)",
+                    callback_data="premium:3m",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    f"⭐ 12 oy — {PLANS['12m']['stars']} ⭐ (eng qulay)",
+                    callback_data="premium:12m",
+                )
+            ],
+        ]
+    )
+    await update.message.reply_text(
+        "👑 <b>Inomjon AI Premium</b>\n\n"
+        "⭐ 1 oy — 150 ⭐\n"
+        "⭐ 3 oy — 400 ⭐\n"
+        "⭐ 12 oy — 1400 ⭐\n\n"
+        f"Holat: <b>{_premium_text(until)}</b>\n\n"
+        "Premium imkoniyatlari:\n"
+        "• 🚀 Tez va kuchli model (LLM)\n"
+        "• 🎨 Cheksiz rasm yaratish\n"
+        "• 🎬 Video / musiqa yaratish\n"
+        "• 🌐 Kengaytirilgan internet qidiruv\n\n"
+        "Rejani tanlang — to'lov Telegram Stars orqali:",
+        parse_mode="HTML",
+        reply_markup=kb,
+    )
+
+
+async def premium_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
+    if not query.data.startswith("premium:"):
+        return
+    plan_key = query.data.split(":", 1)[1]
+    plan = PLANS.get(plan_key)
+    if not plan:
+        await query.message.reply_text("Noma'lum reja. /premium qayta bosing.")
+        return
+
+    chat_id = query.message.chat_id
+    prices = [LabeledPrice("Premium", plan["stars"])]
+    try:
+        await context.bot.send_invoice(
+            chat_id=chat_id,
+            title=plan["title"],
+            description=f"Inomjon AI Premium — {plan['title']}. "
+            "To'lov Telegram Stars orqali amalga oshiriladi.",
+            payload=f"premium:{plan_key}",
+            provider_token="",
+            currency=STAR_CURRENCY,
+            prices=prices,
+        )
+    except Exception as e:
+        logging.error("Stars invoice yuborilmadi: %s", e)
+        await query.message.reply_text(
+            f"❌ Invoice yuborilmadi. Bot @BotFather → Payments da "
+            f"Stars yoqilganini tekshiring.\nXato: {e}"
+        )
+
+
+async def pre_checkout(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.pre_checkout_query
+    payload = query.invoice_payload or ""
+    plan_key = payload.split(":", 1)[1] if payload.startswith("premium:") else ""
+    if plan_key not in PLANS:
+        await query.answer(ok=False, error_message="Noma'lum reja")
+        return
+    await query.answer(ok=True)
+
+
+async def successful_payment(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    payment = update.message.successful_payment
+    payload = payment.invoice_payload or ""
+    plan_key = payload.split(":", 1)[1] if payload.startswith("premium:") else ""
+    plan = PLANS.get(plan_key)
+    if not plan:
+        await update.message.reply_text("To'lov qabul qilindi, lekin reja tanlanmadi.")
+        return
+    db = get_db()
+    user_id = db.get_or_create_user(telegram_id=update.effective_user.id)
+    until = db.add_premium_days(user_id, plan["days"])
+    db.add_payment(
+        user_id,
+        amount=payment.total_amount,
+        plan=plan["title"],
+        payload=payload,
+        provider="stars",
+    )
+    await update.message.reply_text(
+        f"🎉 <b>To'lov muvaffaqiyatli!</b>\n\n"
+        f"👑 {plan['title']} faollashtirildi!\n"
+        f"📅 Premium <b>{until[:10]}</b> gacha amal qiladi.\n\n"
+        "Endi barcha imkoniyatlar ochiq — foydalaning! 🚀",
+        parse_mode="HTML",
+    )
+    logging.info(
+        "Stars to'lov: user=%s plan=%s stars=%s",
+        user_id,
+        plan["title"],
+        payment.total_amount,
     )
 
 
@@ -250,9 +396,14 @@ def _build_app() -> Application:
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_cmd))
     app.add_handler(CommandHandler("new", new_chat))
+    app.add_handler(CommandHandler("premium", premium_cmd))
+    app.add_handler(CommandHandler("pay", premium_cmd))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_message))
     app.add_handler(MessageHandler(filters.PHOTO, on_photo))
     app.add_handler(CallbackQueryHandler(on_callback))
+    app.add_handler(CallbackQueryHandler(premium_callback, pattern=r"^premium:"))
+    app.add_handler(PreCheckoutQueryHandler(pre_checkout))
+    app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment))
     return app
 
 

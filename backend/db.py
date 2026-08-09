@@ -26,7 +26,19 @@ CREATE TABLE IF NOT EXISTS users (
     phone         TEXT,
     token         TEXT,
     referal_code  TEXT UNIQUE,
+    premium_until TEXT,
     created_at    TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS payments (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    INTEGER NOT NULL,
+    provider   TEXT DEFAULT 'stars',
+    amount     INTEGER,
+    plan       TEXT,
+    payload    TEXT,
+    status     TEXT DEFAULT 'ok',
+    created_at TEXT DEFAULT (datetime('now'))
 );
 
 CREATE TABLE IF NOT EXISTS conversations (
@@ -131,7 +143,20 @@ _PG_DDL = [
         phone         TEXT,
         token         TEXT,
         referal_code  TEXT UNIQUE,
+        premium_until TIMESTAMPTZ,
         created_at    TIMESTAMPTZ DEFAULT now()
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS payments (
+        id         BIGSERIAL PRIMARY KEY,
+        user_id    BIGINT NOT NULL,
+        provider   TEXT DEFAULT 'stars',
+        amount     INTEGER,
+        plan       TEXT,
+        payload    TEXT,
+        status     TEXT DEFAULT 'ok',
+        created_at TIMESTAMPTZ DEFAULT now()
     )
     """,
     """
@@ -304,6 +329,13 @@ class Database:
         assert cur.lastrowid is not None
         return cur.lastrowid
 
+    @staticmethod
+    def _now_utc():
+        """UTC vaqt — SQLite uchun string, PG uchun timezone-aware datetime."""
+        from datetime import datetime, timezone
+
+        return datetime.now(timezone.utc)
+
     def _create_tables(self):
         with self._lock:
             if self.pg:
@@ -333,6 +365,9 @@ class Database:
                         cur.execute(
                             f"ALTER TABLE users ADD COLUMN IF NOT EXISTS {col} TEXT"
                         )
+                    cur.execute(
+                        "ALTER TABLE users ADD COLUMN IF NOT EXISTS premium_until TIMESTAMPTZ"
+                    )
                     for col in ("name", "models"):
                         cur.execute(
                             f"ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS {col} TEXT"
@@ -358,6 +393,8 @@ class Database:
             ):
                 if col not in user_cols:
                     self.conn.execute(f"ALTER TABLE users ADD COLUMN {col} TEXT")
+            if "premium_until" not in user_cols:
+                self.conn.execute("ALTER TABLE users ADD COLUMN premium_until TEXT")
             conv_cols = [
                 r[1] for r in self.conn.execute("PRAGMA table_info(conversations)")
             ]
@@ -415,6 +452,81 @@ class Database:
                 (user_id, gid),
             )
             self._execute("DELETE FROM users WHERE id = ?", (gid,))
+
+    # ================= premium / payments =================
+    @staticmethod
+    def _row_get(row, key: str):
+        """sqlite3.Row va dict uchun universal ustun olish."""
+        if row is None:
+            return None
+        try:
+            return row[key]
+        except (KeyError, IndexError):
+            return None
+
+    def is_premium(self, user_id: int) -> bool:
+        """Premium muddati tugamagan bo'lsa True qaytaradi."""
+        from datetime import datetime
+
+        row = self._row("SELECT premium_until FROM users WHERE id = ?", (user_id,))
+        until = self._row_get(row, "premium_until")
+        if not until:
+            return False
+        try:
+            if isinstance(until, str):
+                until_dt = datetime.fromisoformat(until)
+                if until_dt.tzinfo is None:
+                    until_dt = until_dt.replace(tzinfo=self._now_utc().tzinfo)
+                return until_dt > self._now_utc()
+            return until > self._now_utc()
+        except ValueError:
+            return False
+
+    def get_premium_until(self, user_id: int) -> str | None:
+        row = self._row("SELECT premium_until FROM users WHERE id = ?", (user_id,))
+        return self._row_get(row, "premium_until")
+
+    def add_premium_days(self, user_id: int, days: int) -> str:
+        """Premiumga kun qo'shadi; yangi premium_until qaytaradi."""
+        from datetime import datetime, timedelta
+
+        current = self._now_utc()
+        row = self._row("SELECT premium_until FROM users WHERE id = ?", (user_id,))
+        base = current
+        raw = self._row_get(row, "premium_until")
+        if raw:
+            try:
+                until = datetime.fromisoformat(str(raw))
+                if until.tzinfo is None:
+                    until = until.replace(tzinfo=current.tzinfo)
+                base = until if until > current else current
+            except ValueError:
+                base = current
+        new_until = base + timedelta(days=days)
+        if self.pg:
+            self._execute(
+                "UPDATE users SET premium_until = %s WHERE id = %s",
+                (new_until, user_id),
+            )
+        else:
+            self._execute(
+                "UPDATE users SET premium_until = ? WHERE id = ?",
+                (new_until.isoformat(), user_id),
+            )
+        return new_until.isoformat()
+
+    def add_payment(
+        self,
+        user_id: int,
+        amount: int,
+        plan: str,
+        payload: str = "",
+        provider: str = "stars",
+    ) -> int:
+        return self._insert(
+            "INSERT INTO payments (user_id, provider, amount, plan, payload) VALUES (?, ?, ?, ?, ?)",
+            (user_id, provider, amount, plan, payload),
+        )
 
     def get_user(self, user_id: int) -> dict | None:
         row = self._row(
