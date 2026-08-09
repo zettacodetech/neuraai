@@ -86,14 +86,14 @@
         <p class="wa-note" style="margin-top:0">To'lov bitta usulda — Telegram Stars. Premium barcha platformalarda (bot, sayt, ilova, CLI) ishlaydi.</p>
         <div style="display:flex;gap:8px;margin-bottom:14px">
           <button class="wa-tab active" id="billMonthly" style="flex:1">Oylik</button>
-          <button class="wa-tab" id="billYearly" style="flex:1">Yillik 🎁</button>
+          <button class="wa-tab" id="billYearly" style="flex:1">Yillik</button>
         </div>
         <div class="plan-grid" id="planGrid">
           <div class="plan" data-plan="go_m"><div><b>🚀 Go</b><br /><span>Tez model, 100 rasm/oy</span></div><div class="price">150 ⭐/oy</div></div>
-          <div class="plan" data-plan="pro_m"><div><b>⚡ Pro</b><br /><span>Cheksiz rasm/video/musiqa</span></div><div class="price">400 ⭐/oy</div></div>
+          <div class="plan" data-plan="pro_m"><div><b>⚡ Pro</b><br /><span>Cheksiz rasm/video/musiqa<br /><b id="proBonus" style="color:#ffd54a">🎁 +1 oy bepul</b></span></div><div class="price">400 ⭐/oy</div></div>
           <div class="plan" data-plan="ultra_m"><div><b>👑 Ultra</b><br /><span>Eng kuchli model + hammasi</span></div><div class="price">1400 ⭐/oy</div></div>
         </div>
-        <p class="wa-note">🆓 <b>Free</b> — 0 ⭐: asosiy suhbat, kod yozish, 10 rasm/oy. <br />🎁 <b>Yillik</b> — Pro/Ultra'da har 6 oyda 1 oy <b>bepul</b> (+2 oy).</p>
+        <p class="wa-note">🆓 <b>Free</b> — 0 ⭐: asosiy suhbat, kod yozish, 10 rasm/oy. <br />🎁 <b>Pro oylik</b> — 1 oy <b>bepul</b> (400 ⭐ = 2 oy).</p>
       </div>
       <button class="wa-btn" id="payBtn">⭐ To'lovni boshlash</button>
       <p class="wa-note">To'lov tugmasi bosilganda Telegram to'lov oynasi ochiladi. To'lov tugagach tarif avtomatik yoqiladi.</p>
@@ -240,13 +240,15 @@
     let selectedPlan = "go_m";
     let billing = "m";
     const YEARLY = { go_m: "go_y", pro_m: "pro_y", ultra_m: "ultra_y" };
-    const YEARLY_PRICES = "Go — 1500 ⭐/yil (+1 oy bepul)||Pro — 4000 ⭐/yil (+2 oy bepul)||Ultra — 14000 ⭐/yil (+2 oy bepul)".split("||");
+    const YEARLY_PRICES = "Go — 1500 ⭐/yil||Pro — 4000 ⭐/yil||Ultra — 14000 ⭐/yil".split("||");
     const MONTHLY_PRICES = "Go — 150 ⭐/oy||Pro — 400 ⭐/oy||Ultra — 1400 ⭐/oy".split("||");
 
     function setBilling(mode) {
       billing = mode;
       $("billMonthly").classList.toggle("active", mode === "m");
       $("billYearly").classList.toggle("active", mode === "y");
+      const bonus = document.getElementById("proBonus");
+      if (bonus) bonus.style.display = mode === "m" ? "" : "none";
       document.querySelectorAll(".plan").forEach((p) => {
         const monthly = p.dataset.plan;
         p.dataset.plan = mode === "m" ? monthly.replace(/_y$/, "_m") : (YEARLY[monthly] || monthly);

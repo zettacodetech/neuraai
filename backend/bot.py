@@ -346,22 +346,22 @@ async def cancel_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 # ================= Premium / Telegram Stars to'lov =================
 # 4 tarif: Free (bepul), Go, Pro, Ultra
 # Har tarif OYLIK yoki YILLIK variantda.
-# Pro yillik: har 6 oyda 1 oy bepul => 12 oy to'lov, 14 oy premium
+# BONUS: 1 oy bepul — faqat Pro OYLIK tarifi uchun (400 ⭐ => 60 kun)
 PLANS = {
     "go_m": {"title": "Go — 1 oy", "stars": 150, "days": 30, "tier": "go"},
     "go_y": {"title": "Go — 1 yil", "stars": 1500, "days": 365, "tier": "go"},
-    "pro_m": {"title": "Pro — 1 oy", "stars": 400, "days": 30, "tier": "pro"},
-    "pro_y": {
-        "title": "Pro — 1 yil (+2 oy bepul)",
-        "stars": 4000,
-        "days": 425,
+    "pro_m": {
+        "title": "Pro — 1 oy (+1 oy bepul)",
+        "stars": 400,
+        "days": 60,
         "tier": "pro",
     },
+    "pro_y": {"title": "Pro — 1 yil", "stars": 4000, "days": 365, "tier": "pro"},
     "ultra_m": {"title": "Ultra — 1 oy", "stars": 1400, "days": 30, "tier": "ultra"},
     "ultra_y": {
-        "title": "Ultra — 1 yil (+2 oy bepul)",
+        "title": "Ultra — 1 yil",
         "stars": 14000,
-        "days": 425,
+        "days": 365,
         "tier": "ultra",
     },
 }
@@ -381,10 +381,9 @@ TIERS_INFO = (
     "⚡ <b>Pro</b> — 400 ⭐/oy | 4000 ⭐/yil\n"
     "• Cheksiz rasm, video, musiqa\n"
     "• Kengaytirilgan internet qidiruv\n"
-    "🎁 <i>Yillik: har 6 oyda 1 oy bepul!</i>\n\n"
+    "🎁 <i>Oylik: 1 oy bepul!</i>\n\n"
     "👑 <b>Ultra</b> — 1400 ⭐/oy | 14000 ⭐/yil\n"
-    "• Eng kuchli model + hammasi\n"
-    "🎁 <i>Yillik: har 6 oyda 1 oy bepul!</i>"
+    "• Eng kuchli model + hammasi"
 )
 
 

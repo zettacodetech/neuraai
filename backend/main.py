@@ -1601,20 +1601,15 @@ async def set_credentials(req: SetCredentialsRequest) -> JSONResponse:
 _TG_STAR_PLANS = {
     "go_m": {"title": "Go — 1 oy", "stars": 150, "days": 30, "tier": "go"},
     "go_y": {"title": "Go — 1 yil", "stars": 1500, "days": 365, "tier": "go"},
-    "pro_m": {"title": "Pro — 1 oy", "stars": 400, "days": 30, "tier": "pro"},
-    "pro_y": {
-        "title": "Pro — 1 yil (+2 oy bepul)",
-        "stars": 4000,
-        "days": 425,
+    "pro_m": {
+        "title": "Pro — 1 oy (+1 oy bepul)",
+        "stars": 400,
+        "days": 60,
         "tier": "pro",
     },
+    "pro_y": {"title": "Pro — 1 yil", "stars": 4000, "days": 365, "tier": "pro"},
     "ultra_m": {"title": "Ultra — 1 oy", "stars": 1400, "days": 30, "tier": "ultra"},
-    "ultra_y": {
-        "title": "Ultra — 1 yil (+2 oy bepul)",
-        "stars": 14000,
-        "days": 425,
-        "tier": "ultra",
-    },
+    "ultra_y": {"title": "Ultra — 1 yil", "stars": 14000, "days": 365, "tier": "ultra"},
 }
 
 
