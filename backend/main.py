@@ -26,19 +26,26 @@ if os.path.exists(_ENV_PATH):
                 os.environ.setdefault(_k.strip(), _v.strip())
 
 from collections.abc import Iterable
-from fastapi import FastAPI, File, Request, UploadFile
+from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from auth import hash_password, new_token, verify_password
+from auth import (
+    hash_password,
+    new_token,
+    otpauth_url,
+    totp_secret,
+    totp_verify,
+    verify_password,
+)
 from brain import brain
 from db import get_db
 from gen import generate_image, generate_video, status as gen_status
 from coder import generate_code
 from learning import collect_unanswered, learn_from_messages, learn_pair
 from seeds import SEED_KNOWLEDGE
-from vision import analyze as vision_analyze
+from vision import analyze as vision_analyze, edit_image as vision_edit
 
 from llm import OPENROUTER_BASE_URL, llm_chat
 
@@ -47,6 +54,8 @@ _MODELS_CACHE: dict = {"ts": 0.0, "items": []}
 app = FastAPI(title="Inomjon AI")
 
 ADMIN_KEY = os.environ.get("ADMIN_KEY", "admin123")
+
+_PENDING_2FA: dict = {}
 
 ROOT = os.path.join(os.path.dirname(__file__), "..")
 FRONTEND = os.path.join(ROOT, "frontend")
@@ -923,6 +932,48 @@ class SummaryRequest(BaseModel):
     conversation_id: int = 0
 
 
+@app.post("/api/chat/translate")
+def chat_translate(req: SummaryRequest) -> JSONResponse:
+    """Suhbatni tanlangan tilga tarjima qiladi (to'liq javob)."""
+    db = get_db()
+    user = db.get_user_by_token(req.token) if req.token else None
+    if not user:
+        return JSONResponse({"error": "kirish talab qilinadi"}, status_code=401)
+    if not req.conversation_id:
+        return JSONResponse({"error": "conversation_id kerak"}, status_code=400)
+    conv = db.get_conversation(req.conversation_id)
+    if not conv or conv["user_id"] != user["id"]:
+        return JSONResponse({"error": "suhbat topilmadi"}, status_code=404)
+    msgs = db.conversation_messages(req.conversation_id, user["id"])
+    if not msgs:
+        return JSONResponse({"error": "suhbat bo'sh"}, status_code=400)
+    lines = []
+    for m in msgs:
+        who = "Foydalanuvchi" if m["role"] == "user" else "AI"
+        text = (m["text"] or "").strip()
+        if text:
+            lines.append(f"{who}: {text[:400]}")
+    convo_text = "\n".join(lines[-40:])
+    import llm
+
+    prompt = (
+        "Quyidagi suhbatdan faqat savol-javoblarni boshqa tilga tarjima qil, "
+        "qo'shimcha izoh qo'shma. Suhbatdagi rol belgilarini (Foydalanuvchi:/AI:) "
+        "saqlab, har bir qatorni tarjima qil. Suhbat qanday tilda bo'lsa ham natijani "
+        "o'zbek tiliga o'gir.\n\n" + convo_text
+    )
+    try:
+        result = llm.llm_answer(
+            prompt,
+            history=[],
+            context="",
+            model="local" if llm.llm_available() else "auto",
+        )
+    except Exception as e:
+        return JSONResponse({"error": f"Tarjima xato: {e}"}, status_code=500)
+    return JSONResponse({"success": True, "translation": result or "Natija topilmadi"})
+
+
 @app.post("/api/chat/summary")
 def chat_summary(req: SummaryRequest) -> JSONResponse:
     """Suhbatni local AI bilan qisqacha xulosa qilish (SSE emas, to'liq)."""
@@ -1018,6 +1069,39 @@ async def analyze_image(file: UploadFile = File(...)) -> JSONResponse:
         except OSError:
             pass
     return JSONResponse(data)
+
+
+@app.post("/api/edit-image")
+async def edit_image_ep(
+    file: UploadFile = File(...), action: str = Form("retro")
+) -> JSONResponse:
+    """Rasmni tahrirlaydi (retro | upscale | bg-remove), natija URL qaytaradi."""
+    if action not in ("retro", "upscale", "bg-remove"):
+        return JSONResponse(
+            {"error": "action retro | upscale | bg-remove bo'lishi kerak"},
+            status_code=400,
+        )
+    try:
+        os.makedirs(GEN_DIR, exist_ok=True)
+        src = tempfile.mktemp(suffix=".img")
+        with open(src, "wb") as f:
+            f.write(await file.read())
+        dest = os.path.join(GEN_DIR, f"edit_{int(time.time() * 1000)}.jpg")
+        ok = vision_edit(src, dest, action)
+        if not ok:
+            return JSONResponse({"error": "Rasm tahrirlanmadi"}, status_code=400)
+        url = _gen_url(dest)
+        _record_gen(None, "edit", url)
+        return JSONResponse({"success": True, "action": action, "image_url": url})
+    except Exception as e:
+        return JSONResponse(
+            {"error": f"rasmni tahrirlashda xato: {e}"}, status_code=400
+        )
+    finally:
+        try:
+            os.unlink(src)
+        except OSError:
+            pass
 
 
 # ================= Vision (Ollama) =================
@@ -2115,8 +2199,175 @@ def login(req: LoginRequest) -> JSONResponse:
         or not verify_password(req.password, user["password_hash"])
     ):
         return JSONResponse({"error": "email yoki parol noto'g'ri"}, status_code=401)
+    secret = db.get_twofa_secret(user["id"])
+    if secret:
+        _PENDING_2FA[user["id"]] = {"ts": time.time(), "req": req.model_dump()}
+        return JSONResponse(
+            {
+                "twofa_required": True,
+                "user_id": user["id"],
+                "message": "2FA kodini kiriting",
+                "masked": user["email"] or user["username"],
+            },
+            status_code=202,
+        )
     if req.client_id:
         db.transfer_guest(req.client_id, user["id"])
+    token = new_token()
+    db.set_token(user["id"], token)
+    return JSONResponse(
+        {
+            "token": token,
+            "username": user["username"],
+            "name": user["name"] or user["username"],
+            "surname": user.get("surname") or "",
+            "email": user.get("email") or "",
+            "phone": user.get("phone") or "",
+        }
+    )
+
+
+class TwoFaRequest(BaseModel):
+    user_id: int
+    code: str = ""
+
+
+@app.post("/api/2fa/setup")
+def twofa_setup(req: TwoFaConfirmRequest) -> JSONResponse:
+    """2FA yoqish: yangi maxfiy kalit + Google Authenticator havolasi qaytaradi."""
+    db = get_db()
+    user = db.get_user_by_token(req.token) if req.token else None
+    if not user:
+        return JSONResponse({"error": "kirish talab qilinadi"}, status_code=401)
+    secret = totp_secret()
+    db.set_twofa_secret(user["id"], secret)
+    return JSONResponse(
+        {
+            "success": True,
+            "secret": secret,
+            "otpauth_url": otpauth_url(secret, user["email"] or user["username"]),
+        }
+    )
+
+
+class TwoFaConfirmRequest(BaseModel):
+    token: str = ""
+    code: str = ""
+
+
+@app.post("/api/2fa/confirm")
+def twofa_confirm(req: TwoFaConfirmRequest) -> JSONResponse:
+    """2FA yoqishni tasdiqlash (kiritilgan kod to'g'ri bo'lishi shart)."""
+    db = get_db()
+    user = db.get_user_by_token(req.token) if req.token else None
+    if not user:
+        return JSONResponse({"error": "kirish talab qilinadi"}, status_code=401)
+    secret = db.get_twofa_secret(user["id"])
+    if not secret:
+        return JSONResponse({"error": "2FA avval /setup qiling"}, status_code=400)
+    if not totp_verify(secret, req.code.strip()):
+        return JSONResponse({"error": "kod noto'g'ri"}, status_code=401)
+    return JSONResponse({"success": True, "twofa_enabled": True})
+
+
+class TwoFaDisableRequest(BaseModel):
+    token: str = ""
+    code: str = ""
+
+
+class ScheduleRequest(BaseModel):
+    token: str = ""
+    text: str = ""
+    send_at: str = ""  # ISO 8601, masalan 2026-08-10T18:00
+
+
+class ScheduleDeleteRequest(BaseModel):
+    token: str = ""
+    sched_id: int = 0
+
+
+@app.post("/api/2fa/disable")
+def twofa_disable(req: TwoFaDisableRequest) -> JSONResponse:
+    """2FA o'chirish (joriy kodni tekshirib)."""
+    db = get_db()
+    user = db.get_user_by_token(req.token) if req.token else None
+    if not user:
+        return JSONResponse({"error": "kirish talab qilinadi"}, status_code=401)
+    secret = db.get_twofa_secret(user["id"])
+    if not secret:
+        return JSONResponse({"error": "2FA yoqilmagan"}, status_code=400)
+    if not totp_verify(secret, req.code.strip()):
+        return JSONResponse({"error": "kod noto'g'ri"}, status_code=401)
+    db.set_twofa_secret(user["id"], None)
+    return JSONResponse({"success": True, "twofa_enabled": False})
+
+
+@app.post("/api/schedule/create")
+def schedule_create(req: ScheduleRequest) -> JSONResponse:
+    """Rejalashtirilgan xabar yaratadi (vaqt kelganda bot Telegramda yuboradi)."""
+    db = get_db()
+    user = db.get_user_by_token(req.token) if req.token else None
+    if not user:
+        return JSONResponse({"error": "kirish talab qilinadi"}, status_code=401)
+    text = req.text.strip()
+    send_at = req.send_at.strip()
+    if len(text) < 2 or len(text) > 2000:
+        return JSONResponse(
+            {"error": "matn 2-2000 belgi bo'lishi kerak"}, status_code=400
+        )
+    if not send_at:
+        return JSONResponse(
+            {"error": "vaqt (send_at) kerak, masalan 2026-08-10T18:00"}, status_code=400
+        )
+    try:
+        from datetime import datetime
+
+        datetime.fromisoformat(send_at)
+    except ValueError:
+        return JSONResponse(
+            {"error": "vaqt formati noto'g'ri (YYYY-MM-DDTHH:MM)"}, status_code=400
+        )
+    sched_id = db.create_scheduled(user["id"], text, send_at)
+    return JSONResponse({"success": True, "sched_id": sched_id, "send_at": send_at})
+
+
+@app.get("/api/schedule/list")
+def schedule_list(token: str = "") -> JSONResponse:
+    db = get_db()
+    user = db.get_user_by_token(token) if token else None
+    if not user:
+        return JSONResponse({"error": "kirish talab qilinadi"}, status_code=401)
+    items = db.list_scheduled(user["id"], include_sent=True)
+    return JSONResponse({"items": items})
+
+
+@app.post("/api/schedule/delete")
+def schedule_delete(req: ScheduleDeleteRequest) -> JSONResponse:
+    db = get_db()
+    user = db.get_user_by_token(req.token) if req.token else None
+    if not user:
+        return JSONResponse({"error": "kirish talab qilinadi"}, status_code=401)
+    db.delete_scheduled(req.sched_id, user["id"])
+    return JSONResponse({"success": True})
+
+
+@app.post("/api/login/2fa")
+def login_2fa(req: TwoFaRequest) -> JSONResponse:
+    """2FA kodini tekshiradi va tokenni beradi."""
+    db = get_db()
+    pend = _PENDING_2FA.pop(req.user_id, None)
+    if not pend or time.time() - pend["ts"] > 300:
+        return JSONResponse(
+            {"error": "2FA sessiyasi tugadi, qayta kiriting"}, status_code=401
+        )
+    secret = db.get_twofa_secret(req.user_id)
+    if not secret or not totp_verify(secret, req.code.strip()):
+        return JSONResponse({"error": "2FA kod noto'g'ri"}, status_code=401)
+    user = db.get_user(req.user_id)
+    if not user:
+        return JSONResponse({"error": "foydalanuvchi topilmadi"}, status_code=404)
+    if pend["req"].get("client_id"):
+        db.transfer_guest(pend["req"]["client_id"], user["id"])
     token = new_token()
     db.set_token(user["id"], token)
     return JSONResponse(
@@ -2137,6 +2388,11 @@ def me(token: str = "") -> JSONResponse:
     user = db.get_user_by_token(token)
     if not user:
         return JSONResponse({"error": "kirish talab qilinadi"}, status_code=401)
+    plan = db.get_premium_plan(user["id"])
+    if not db.is_premium(user["id"]):
+        plan = "free"
+    limit = DAILY_LIMITS.get(plan, 20)
+    used = db.daily_usage(user["id"]) if limit > 0 else 0
     return JSONResponse(
         {
             "id": user["id"],
@@ -2150,7 +2406,10 @@ def me(token: str = "") -> JSONResponse:
             "avatar": user.get("avatar") or "",
             "premium": db.is_premium(user["id"]),
             "premium_until": db.get_premium_until(user["id"]) or "",
-            "premium_plan": db.get_premium_plan(user["id"]),
+            "premium_plan": plan,
+            "daily_limit": limit,
+            "daily_used": used,
+            "twofa_enabled": bool(db.get_twofa_secret(user["id"])),
         }
     )
 

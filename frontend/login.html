@@ -80,6 +80,10 @@
           <label for="fPassword">Parol</label>
           <input id="fPassword" type="password" placeholder="••••••••" autocomplete="current-password" required />
         </div>
+        <div class="field" id="faBox" style="display:none">
+          <label for="fCode">2FA kod (Google Authenticator)</label>
+          <input id="fCode" type="text" inputmode="numeric" maxlength="6" placeholder="123456" autocomplete="one-time-code" autofocus />
+        </div>
         <button class="auth-submit" id="authSubmit" type="submit">Kirish</button>
       </form>
       <div class="tg-divider"><span>yoki</span></div>
@@ -143,9 +147,18 @@
     const form = document.getElementById("authForm");
     const ok = document.getElementById("authOk");
     const btn = document.getElementById("authSubmit");
+    let pend2fa = null;
 
     function cacheUser(u) {
       try { localStorage.setItem("neura_user", JSON.stringify(u)); } catch (e) {}
+    }
+
+    function show2fa(userId) {
+      pend2fa = userId;
+      document.getElementById("faBox").style.display = "block";
+      document.getElementById("fPassword").parentElement.style.display = "none";
+      btn.textContent = "Kodni tasdiqlash";
+      document.getElementById("fCode").focus();
     }
 
     form.onsubmit = async (e) => {
@@ -155,17 +168,38 @@
       const email = document.getElementById("fEmail").value.trim().toLowerCase();
       const password = document.getElementById("fPassword").value;
       if (!email.includes("@")) { err.textContent = "To'g'ri email kiriting (masalan: ism@mail.com)"; err.style.display = "block"; return; }
-      if (password.length < 4) { err.textContent = "Parol kamida 4 ta belgidan iborat bo'lsin"; err.style.display = "block"; return; }
+      if (!pend2fa && password.length < 4) { err.textContent = "Parol kamida 4 ta belgidan iborat bo'lsin"; err.style.display = "block"; return; }
       btn.disabled = true;
       btn.textContent = "Kirilmoqda...";
       try {
-        const res = await fetch("/api/login", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email, password, client_id: CLIENT_ID }),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "xato");
+        let data;
+        if (pend2fa) {
+          const code = document.getElementById("fCode").value.trim();
+          if (code.length !== 6) { err.textContent = "6 xonali kodni kiriting"; err.style.display = "block"; btn.disabled = false; btn.textContent = "Kodni tasdiqlash"; return; }
+          const r2 = await fetch("/api/login/2fa", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ user_id: pend2fa, code }),
+          });
+          data = await r2.json();
+          if (!r2.ok) {
+            throw new Error(data.error || "xato");
+          }
+          pend2fa = null;
+        } else {
+          const res = await fetch("/api/login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email, password, client_id: CLIENT_ID }),
+          });
+          data = await res.json();
+          if (res.status === 202 && data.twofa_required) {
+            show2fa(data.user_id || 0);
+            btn.disabled = false;
+            return;
+          }
+          if (!res.ok) throw new Error(data.error || "xato");
+        }
         localStorage.setItem("neura_token", data.token);
         cacheUser({ username: data.username, name: data.name, surname: data.surname || "", email: data.email || "", phone: data.phone || "" });
         ok.textContent = "Muvaffaqiyatli kirdingiz!";
@@ -175,7 +209,7 @@
         err.textContent = ex.message || "Xatolik yuz berdi. Qayta urinib ko'ring.";
         err.style.display = "block";
         btn.disabled = false;
-        btn.textContent = "Kirish";
+        btn.textContent = pend2fa ? "Kodni tasdiqlash" : "Kirish";
       }
     };
   </script>

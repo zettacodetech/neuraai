@@ -27,7 +27,8 @@ CREATE TABLE IF NOT EXISTS users (
     token         TEXT,
     referal_code  TEXT UNIQUE,
     premium_until TEXT,
-    created_at    TEXT DEFAULT (datetime('now'))
+    created_at    TEXT DEFAULT (datetime('now')),
+    twofa_secret  TEXT
 );
 
 CREATE TABLE IF NOT EXISTS payments (
@@ -91,6 +92,15 @@ CREATE TABLE IF NOT EXISTS shares (
     conversation_id INTEGER NOT NULL,
     user_id    INTEGER NOT NULL,
     code       TEXT NOT NULL UNIQUE,
+    created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS scheduled_messages (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    INTEGER NOT NULL,
+    text       TEXT NOT NULL,
+    send_at    TEXT NOT NULL,
+    status     TEXT DEFAULT 'pending',
     created_at TEXT DEFAULT (datetime('now'))
 );
 
@@ -160,7 +170,8 @@ _PG_DDL = [
         token         TEXT,
         referal_code  TEXT UNIQUE,
         premium_until TIMESTAMPTZ,
-        created_at    TIMESTAMPTZ DEFAULT now()
+        created_at    TIMESTAMPTZ DEFAULT now(),
+        twofa_secret  TEXT
     )
     """,
     """
@@ -231,6 +242,16 @@ _PG_DDL = [
         conversation_id BIGINT NOT NULL,
         user_id    BIGINT NOT NULL,
         code       TEXT NOT NULL UNIQUE,
+        created_at TIMESTAMPTZ DEFAULT now()
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS scheduled_messages (
+        id         BIGSERIAL PRIMARY KEY,
+        user_id    BIGINT NOT NULL,
+        text       TEXT NOT NULL,
+        send_at    TIMESTAMPTZ NOT NULL,
+        status     TEXT DEFAULT 'pending',
         created_at TIMESTAMPTZ DEFAULT now()
     )
     """,
@@ -405,6 +426,9 @@ class Database:
                     cur.execute(
                         "ALTER TABLE users ADD COLUMN IF NOT EXISTS premium_plan TEXT"
                     )
+                    cur.execute(
+                        "ALTER TABLE users ADD COLUMN IF NOT EXISTS twofa_secret TEXT"
+                    )
                     for col in ("name", "models"):
                         cur.execute(
                             f"ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS {col} TEXT"
@@ -434,6 +458,8 @@ class Database:
                 self.conn.execute("ALTER TABLE users ADD COLUMN premium_until TEXT")
             if "premium_plan" not in user_cols:
                 self.conn.execute("ALTER TABLE users ADD COLUMN premium_plan TEXT")
+            if "twofa_secret" not in user_cols:
+                self.conn.execute("ALTER TABLE users ADD COLUMN twofa_secret TEXT")
             conv_cols = [
                 r[1] for r in self.conn.execute("PRAGMA table_info(conversations)")
             ]
@@ -715,6 +741,17 @@ class Database:
 
     def set_user_token(self, user_id: int, token: str) -> None:
         self.set_token(user_id, token)
+
+    # ================= Ikki bosqichli autentifikatsiya (2FA) =================
+    def get_twofa_secret(self, user_id: int) -> str | None:
+        row = self._row("SELECT twofa_secret FROM users WHERE id = ?", (user_id,))
+        return (row or {}).get("twofa_secret")
+
+    def set_twofa_secret(self, user_id: int, secret: str | None) -> None:
+        with self._lock:
+            self._execute(
+                "UPDATE users SET twofa_secret = ? WHERE id = ?", (secret, user_id)
+            )
 
     # ================= Telegram WebApp =================
     def get_user_by_telegram(self, telegram_id: str) -> dict | None:
@@ -1107,6 +1144,51 @@ class Database:
             self._execute(
                 "DELETE FROM shares WHERE conversation_id = ? AND user_id = ?",
                 (conversation_id, user_id),
+            )
+
+    # ================= rejalashtirilgan xabarlar =================
+    def create_scheduled(self, user_id: int, text: str, send_at: str) -> int | None:
+        return self._insert(
+            "INSERT INTO scheduled_messages (user_id, text, send_at) VALUES (?, ?, ?)",
+            (user_id, text, send_at),
+        )
+
+    def list_scheduled(self, user_id: int, include_sent: bool = False) -> list:
+        sql = (
+            "SELECT * FROM scheduled_messages WHERE user_id = ?"
+            + ("" if include_sent else " AND status = 'pending'")
+            + " ORDER BY send_at DESC LIMIT 50"
+        )
+        rows = self._rows(sql, (user_id,))
+        return [dict(r) for r in rows]
+
+    def delete_scheduled(self, sched_id: int, user_id: int) -> None:
+        with self._lock:
+            self._execute(
+                "DELETE FROM scheduled_messages WHERE id = ? AND user_id = ?",
+                (sched_id, user_id),
+            )
+
+    def due_scheduled(self, now_iso: str) -> list:
+        if self.pg:
+            rows = self._rows(
+                "SELECT * FROM scheduled_messages WHERE status = 'pending' "
+                "AND send_at <= %s::timestamp ORDER BY send_at ASC LIMIT 20",
+                (now_iso,),
+            )
+        else:
+            rows = self._rows(
+                "SELECT * FROM scheduled_messages WHERE status = 'pending' AND send_at <= ? "
+                "ORDER BY send_at ASC LIMIT 20",
+                (now_iso,),
+            )
+        return [dict(r) for r in rows]
+
+    def mark_scheduled_sent(self, sched_id: int) -> None:
+        with self._lock:
+            self._execute(
+                "UPDATE scheduled_messages SET status = 'sent' WHERE id = ?",
+                (sched_id,),
             )
 
     # ================= qidiruv =================

@@ -1318,11 +1318,43 @@ async def _remind_premium(context: ContextTypes.DEFAULT_TYPE) -> None:
         logging.warning("Eslatma job xato: %s", exc)
 
 
+async def _send_scheduled(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Rejalashtirilgan xabarlarni (saytda yaratilgan) vaqti kelganda yuboradi."""
+    try:
+        from db import get_db
+
+        db = get_db()
+        from datetime import datetime
+
+        now_iso = datetime.now().strftime("%Y-%m-%dT%H:%M")
+        for entry in db.due_scheduled(now_iso):
+            sched_id = entry["id"]
+            user = db.get_user(entry["user_id"])
+            tid = (user or {}).get("telegram_id")
+            text = entry.get("text", "")
+            at = entry.get("send_at", "")
+            try:
+                if tid:
+                    await context.bot.send_message(
+                        chat_id=tid,
+                        text=(f"⏰ <b>Rejalashtirilgan xabar ({at})</b>\n\n{text}"),
+                        parse_mode="HTML",
+                    )
+                db.mark_scheduled_sent(sched_id)
+            except Exception as exc:
+                logging.warning(
+                    "Rejalashtirilgan xabar yuborilmadi (%s): %s", sched_id, exc
+                )
+    except Exception as exc:
+        logging.warning("Rejalashtirilgan xabar job xato: %s", exc)
+
+
 def _schedule_reminders(app: Application) -> None:
-    """Har 6 soatda premium eslatma job'ini ro'yxatdan o'tkazadi."""
+    """Har 6 soatda premium eslatma + har daqiqada rejalashtirilgan xabar job'lari."""
     try:
         app.job_queue.run_repeating(_remind_premium, interval=6 * 3600, first=3600)
-        logging.info("Premium eslatma job ishga tushdi")
+        app.job_queue.run_repeating(_send_scheduled, interval=60, first=30)
+        logging.info("Premium eslatma va rejalashtirilgan xabar job'lari ishga tushdi")
     except Exception as exc:
         logging.warning("Eslatma job yaratilmadi: %s", exc)
 

@@ -145,6 +145,22 @@
         <button class="ghost-btn" id="passSave" type="submit" style="width:100%">Parolni yangilash</button>
       </form>
 
+      <div class="profile-divider">🛡️ Ikki bosqichli kirish (2FA)</div>
+      <div class="field"><b id="twofaStatus">2FA: tekshirilmoqda...</b></div>
+      <div id="twofaSetupBox" hidden>
+        <p class="hint">Google Authenticator / Authy ilovasida quyidagi maxfiy kalitni qo'shing yoki otpauth havolasini skanerlang:</p>
+        <div class="field"><label for="twofaSecret">Maxfiy kalit</label>
+          <input id="twofaSecret" readonly onclick="this.select()" /></div>
+        <div class="field"><label for="twofaCode">Ilovadan kod</label>
+          <input id="twofaCode" type="text" inputmode="numeric" maxlength="6" placeholder="123456" /></div>
+        <button class="ghost-btn" id="twofaEnable" style="width:100%">2FA ni yoqish</button>
+      </div>
+      <div id="twofaDisableBox" hidden>
+        <div class="field"><label for="twofaDisableCode">Joriy kod</label>
+          <input id="twofaDisableCode" type="text" inputmode="numeric" maxlength="6" placeholder="123456" /></div>
+        <button class="ghost-danger" id="twofaDisable" style="width:100%">2FA ni o'chirish</button>
+      </div>
+
       <button class="ghost-danger" id="profileLogout">Chiqish</button>
       <div class="auth-home">
         <a href="/">← Chatga qaytish</a>
@@ -234,6 +250,7 @@
         localStorage.setItem("neura_user", JSON.stringify(u));
         tgLinked = u.telegram_id || null;
         renderTgBind();
+        renderTwofa(u.twofa_enabled || false);
         if (u.avatar) document.getElementById("avatarPreview").src = u.avatar;
         const premiumEl = document.getElementById("premiumStatus");
         if (premiumEl) {
@@ -334,6 +351,56 @@
           } catch (ex) { showErr(profileErr, ex.message); }
         };
         reader.readAsDataURL(file);
+      };
+
+      /* ================= 2FA (ikki bosqichli kirish) ================= */
+      const twofaStatus = document.getElementById("twofaStatus");
+      const setupBox = document.getElementById("twofaSetupBox");
+      const disableBox = document.getElementById("twofaDisableBox");
+      let twofaStep = null;
+
+      function renderTwofa(enabled) {
+        twofaStatus.textContent = enabled ? "✅ 2FA yoqilgan" : "2FA o'chirilgan";
+        setupBox.hidden = enabled;
+        disableBox.hidden = !enabled;
+        if (enabled) { twofaStep = null; }
+      }
+
+      document.getElementById("twofaEnable").onclick = async () => {
+        try {
+          if (!twofaStep) {
+            const d = await apiFetch("/api/2fa/setup", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ token }),
+            });
+            twofaStep = d.secret;
+            document.getElementById("twofaSecret").value = d.secret + "  (" + d.otpauth_url + ")";
+            twofaStatus.textContent = "Ilovadan kodni kiriting";
+            return;
+          }
+          const code = document.getElementById("twofaCode").value.trim();
+          const d = await apiFetch("/api/2fa/confirm", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ token, code }),
+          });
+          renderTwofa(d.twofa_enabled);
+          showOk(profileOk, "✅ 2FA yoqildi!");
+        } catch (ex) { showErr(profileErr, ex.message); }
+      };
+
+      document.getElementById("twofaDisable").onclick = async () => {
+        const code = document.getElementById("twofaDisableCode").value.trim();
+        try {
+          const d = await apiFetch("/api/2fa/disable", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ token, code }),
+          });
+          renderTwofa(d.twofa_enabled);
+          showOk(profileOk, "2FA o'chirildi");
+        } catch (ex) { showErr(profileErr, ex.message); }
       };
     }
   </script>

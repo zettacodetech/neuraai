@@ -171,6 +171,13 @@ button:focus-visible, a:focus-visible, textarea:focus-visible, input:focus-visib
 
 /* platforms */
 .plat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-top: 30px; }
+.news-list { display: grid; gap: 10px; margin-top: 30px; }
+.news-item { display: flex; gap: 12px; align-items: flex-start; background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 13px 16px; transition: transform .2s; }
+.news-item:hover { transform: translateX(4px); }
+.news-item .n-emoji { font-size: 1.2rem; margin-top: 1px; }
+.news-item p { margin: 0; font-size: 0.92rem; color: var(--text); }
+.news-item a { color: var(--accent); font-size: 0.82rem; text-decoration: none; }
+.news-empty { color: var(--muted); text-align: center; margin-top: 20px; font-size: 0.9rem; }
 @media (max-width: 900px) { .plat-grid { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 520px) { .plat-grid { grid-template-columns: 1fr; } }
 .plat {
@@ -306,6 +313,8 @@ button:focus-visible, a:focus-visible, textarea:focus-visible, input:focus-visib
 .header-actions { display: flex; align-items: center; gap: 10px; margin-left: auto; }
 .status { display: flex; align-items: center; gap: 8px; font-size: 0.82rem; color: var(--muted); }
 .status .dot { width: 8px; height: 8px; border-radius: 50%; background: #34d399; animation: pulse 1.8s infinite; }
+.status .dot.g { background: #34d399; animation: none; }
+.status.limit-low { color: #fbbf24; border: 1px solid rgba(251,191,36,.4); border-radius: 999px; padding: 3px 10px; }
 .head-btn { display: flex; align-items: center; gap: 6px; padding: 9px 12px; border-radius: 11px; border: 1px solid var(--border); font-size: 0.85rem; font-weight: 600; color: var(--text); background: var(--panel); }
 .head-btn:hover { background: var(--panel2); }
 .accent-btn { background: var(--grad); border: none; color: #fff; }
@@ -696,6 +705,26 @@ html.kb-open .layout { height: var(--kb, 100dvh); }
 .copy-btn:hover { background: var(--panel2); color: var(--text); }
 .copy-btn.ok { opacity: 1; color: #34d399; }
 @media (max-width: 900px) { .copy-btn { opacity: 1; } }
+
+/* ---------- rasm tahrirlash tugmalari ---------- */
+.img-edit-bar { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.mini-btn {
+  border: 1px solid var(--border); background: var(--panel2); color: var(--text);
+  padding: 5px 10px; border-radius: 8px; font-size: 12px; cursor: pointer;
+  transition: transform 0.15s, border-color 0.15s, color 0.15s;
+}
+.mini-btn:hover { transform: translateY(-1px); border-color: var(--accent); color: var(--accent); }
+.dl-link { color: var(--accent); font-weight: 600; text-decoration: none; }
+.dl-link:hover { text-decoration: underline; }
+
+/* ---------- rejalashtirilgan xabarlar ---------- */
+.sched-list { display: flex; flex-direction: column; gap: 8px; max-height: 260px; overflow-y: auto; }
+.sched-item {
+  display: flex; align-items: center; gap: 4px;
+  background: var(--panel2); border: 1px solid var(--border);
+  border-radius: 12px; padding: 10px 12px;
+}
+.sched-text { font-size: 0.9rem; font-weight: 600; margin-bottom: 2px; }
 
 /* ---------- profil modal ---------- */
 .profile-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }

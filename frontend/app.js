@@ -32,6 +32,18 @@ const shareBtn = document.getElementById("shareBtn");
 /* ================= holat ================= */
 
 let me = null;          // {token, username, name, surname, email, phone} | null
+
+function updateLimitBadge() {
+  const badge = document.getElementById("limitBadge");
+  if (!badge) return;
+  if (!me || !me.daily_limit) { badge.hidden = true; return; }
+  badge.hidden = false;
+  document.getElementById("limitNum").textContent = Math.max(0, me.daily_limit - (me.daily_used || 0));
+  document.getElementById("limitMax").textContent = me.daily_limit;
+  const left = me.daily_limit - (me.daily_used || 0);
+  badge.title = left <= 3 ? "Limit tugayapti — /premium oshiring!" : "Bugungi so'rovlar limiti";
+  badge.classList.toggle("limit-low", left <= 3);
+}
 let currentConv = null; // ochiq suhbat id (null = yangi)
 let sending = false;
 let currentModel = localStorage.getItem("neura_model") || "fast";
@@ -218,26 +230,47 @@ function mdInline(t) {
 /* ============ jonli effektlar (99999D) ============ */
 
 function speak(text, btn) {
-  if (!("speechSynthesis" in window)) return;
-  if (speechSynthesis.speaking && btn.dataset.on === "1") {
-    speechSynthesis.cancel();
-    btn.dataset.on = "0";
-    btn.classList.remove("playing");
+  const clean = text.replace(/```[\s\S]*?```/g, " kod ").replace(/<[^>]+>/g, " ").slice(0, 1200);
+  const stop = () => { btn.dataset.on = "0"; btn.classList.remove("playing"); };
+  if (btn.dataset.on === "1" && window.__nAudio) {
+    try { window.__nAudio.pause(); window.__nAudio = null; } catch (e) {}
+    stop();
     return;
   }
-  const u = new SpeechSynthesisUtterance(text.replace(/```[\s\S]*?```/g, " kod ").slice(0, 1200));
-  const voices = speechSynthesis.getVoices();
-  u.voice = voices.find((v) => /^uz/i.test(v.lang)) || voices.find((v) => /^(ru|az|kk|ky)/i.test(v.lang)) || null;
-  u.lang = u.voice ? u.voice.lang : (u.voice && /^uz/i.test(u.voice.lang) ? "uz-UZ" : "ru-RU");
-  u.rate = 1;
-  u.pitch = 1;
+  if ("speechSynthesis" in window && speechSynthesis.getVoices().length > 0) {
+    if (speechSynthesis.speaking && btn.dataset.on === "1") {
+      speechSynthesis.cancel();
+      stop();
+      return;
+    }
+    const u = new SpeechSynthesisUtterance(clean);
+    const voices = speechSynthesis.getVoices();
+    u.voice = voices.find((v) => /^uz/i.test(v.lang)) || voices.find((v) => /^(ru|az|kk|ky)/i.test(v.lang)) || null;
+    u.lang = u.voice ? u.voice.lang : "ru-RU";
+    u.rate = 1;
+    u.pitch = 1;
+    btn.dataset.on = "1";
+    btn.classList.add("playing");
+    u.onend = u.onerror = stop;
+    speechSynthesis.speak(u);
+    return;
+  }
+  // API TTS fallback (ElevenLabs / Pollinations) — WebApp / WebView uchun
   btn.dataset.on = "1";
   btn.classList.add("playing");
-  u.onend = u.onerror = () => {
-    btn.dataset.on = "0";
-    btn.classList.remove("playing");
-  };
-  speechSynthesis.speak(u);
+  fetch("/api/generate-voice", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text: clean, token: (me && me.token) || "" }),
+  }).then(async (r) => {
+    const d = await r.json().catch(() => ({}));
+    if (!d.audio_url) throw new Error("audio yo'q");
+    if (window.__nAudio) { try { window.__nAudio.pause(); } catch (e) {} }
+    const audio = new Audio(d.audio_url);
+    window.__nAudio = audio;
+    audio.onended = audio.onerror = stop;
+    audio.play().catch(stop);
+  }).catch(stop);
 }
 
 function voiceButton(text) {
@@ -508,6 +541,27 @@ async function send(text) {
     }
     return;
   }
+  if (text === "/translate") {
+    input.value = "";
+    if (!currentConv) { toast("Avval suhbatni oching"); return; }
+    const typing = typingRow();
+    try {
+      const res = await fetch("/api/chat/translate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: me.token, conversation_id: currentConv }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw Object.assign(new Error(data.error || "xato"), { status: res.status });
+      typing.remove();
+      qMessage("ai", "🌐 Suhbat tarjimasi:\n\n" + data.translation);
+      flashRow(document.querySelector(".row.ai.msg-in:last-of-type"));
+    } catch (e) {
+      typing.remove();
+      qMessage("ai", "⚠️ Tarjima xatosi: " + (e.message || "qayta urinib ko'ring"));
+    }
+    return;
+  }
   if (text === "/export") {
     if (currentConv) {
       try {
@@ -667,6 +721,54 @@ async function send(text) {
 
 /* ================= rasm tahlili ================= */
 
+async function editImage(file, action, label) {
+  const fd = new FormData();
+  fd.append("file", file);
+  fd.append("action", action);
+  const typing = typingRow();
+  try {
+    const res = await fetch("/api/edit-image", { method: "POST", body: fd });
+    const d = await res.json();
+    typing.remove();
+    if (!res.ok) throw new Error(d.error || "xato");
+    const row = document.createElement("div");
+    row.className = "row ai msg-in";
+    const av = document.createElement("div");
+    av.className = "avatar";
+    av.textContent = "✦";
+    row.appendChild(av);
+    const b = document.createElement("div");
+    b.className = "bubble";
+    b.innerHTML = '<b>🖼️ ' + label + ':</b> <a class="dl-link" href="' + d.image_url + '" target="_blank" rel="noopener">Ochish</a>';
+    row.appendChild(b);
+    chat.appendChild(row);
+    chat.scrollTop = chat.scrollHeight;
+  } catch (e) {
+    typing.remove();
+    qMessage("ai", "⚠️ Tahrirlash xatosi: " + (e.message || "qayta urinib ko'ring"));
+  }
+}
+
+function attachImageEditActions(file) {
+  const last = document.querySelector(".row.ai.msg-in:last-of-type .bubble");
+  if (!last) return;
+  const wrap = document.createElement("div");
+  wrap.className = "img-edit-bar";
+  const acts = [
+    ["retro", "🕰 Retro"],
+    ["upscale", "🔍 2x kat"],
+    ["bg-remove", "✂️ BG olib tashlash"],
+  ];
+  acts.forEach(([a, lbl]) => {
+    const btn = document.createElement("button");
+    btn.className = "mini-btn";
+    btn.textContent = lbl;
+    btn.onclick = () => editImage(file, a, lbl);
+    wrap.appendChild(btn);
+  });
+  last.appendChild(wrap);
+}
+
 function formatAnalysis(d) {
   const lines = [
     "📷 <b>Rasm tahlili:</b>",
@@ -715,6 +817,7 @@ async function sendImage(file) {
     if (!res.ok) throw Object.assign(new Error(data.error || "xato"), { status: res.status });
     typing.remove();
     qMessage("ai", data.analysis || "Tahlil topilmadi");
+    attachImageEditActions(file);
     flashRow(document.querySelector(".row.ai.msg-in:last-of-type"));
     confettiBurst();
   } catch (e) {
@@ -761,10 +864,11 @@ async function sendDoc(file) {
   } catch (e) {
     typing.remove();
     qMessage("ai", "⚠️ Hujjatni o'qib bo'lmadi: " + (e.message || "qayta urinib ko'ring"));
-    sending = false;
-    sendBtn.disabled = false;
-    return;
-  }
+sending = false;
+  sendBtn.disabled = false;
+  input.focus();
+  if (me && (me.daily_used !== undefined)) { me.daily_used++; updateLimitBadge(); }
+}
   typing.remove();
   send(text);
   sending = false;
@@ -1348,6 +1452,13 @@ async function createShare() {
       : location.origin + data.url;
     const urlEl = document.getElementById("shareUrl");
     const delBtn = document.getElementById("shareDelBtn");
+    const qrEl = document.getElementById("shareQr");
+    urlEl.value = full;
+    if (qrEl) {
+      qrEl.src = "https://api.qrserver.com/v1/create-qr-code/?size=280x280&margin=8&qzone=1&color=8f7bff&bgcolor=ffffff&data=" + encodeURIComponent(full);
+      qrEl.style.display = "block";
+      qrEl.title = "Havolani skanerlang";
+    }
     urlEl.value = full;
     delBtn.style.display = "block";
     delBtn.onclick = async () => {
@@ -1441,6 +1552,74 @@ if (searchBtn) {
     openModal("searchModal");
     setTimeout(() => { searchInput && searchInput.focus(); }, 100);
     runSearch(searchInput && searchInput.value);
+  };
+}
+
+/* ---------- rejalashtirilgan xabarlar ---------- */
+
+const schedBtn = document.getElementById("schedBtn");
+if (schedBtn) {
+  schedBtn.onclick = () => {
+    if (!me) { openAuth(); return; }
+    openModal("schedModal");
+    loadScheduled();
+  };
+}
+
+async function loadScheduled() {
+  const list = document.getElementById("schedList");
+  if (!me) return;
+  try {
+    const d = await api("/api/schedule/list?token=" + encodeURIComponent(me.token));
+    const items = d.items || [];
+    if (!items.length) { list.innerHTML = '<div class="search-empty">Hali reja yo\'q.</div>'; return; }
+    list.innerHTML = "";
+    items.forEach((it) => {
+      const div = document.createElement("div");
+      div.className = "sched-item";
+      div.innerHTML =
+        '<div style="flex:1;overflow:hidden">' +
+        '<div class="sched-text">' + esc(String(it.text || "").slice(0, 90)) + '</div>' +
+        '<small style="color:var(--muted)">🕒 ' + esc(it.send_at || "") + (it.status === "sent" ? " · ✅ yuborildi" : "") + '</small>' +
+        '</div>';
+      if (it.status !== "sent") {
+        const del = document.createElement("button");
+        del.className = "mini-btn";
+        del.textContent = "✕";
+        del.style.marginLeft = "8px";
+        del.onclick = async () => {
+          try {
+            await api("/api/schedule/delete", { method: "POST", body: JSON.stringify({ token: me.token, sched_id: it.id }) });
+            loadScheduled();
+          } catch (e) { toast(e.message); }
+        };
+        div.appendChild(del);
+      }
+      list.appendChild(div);
+    });
+  } catch (e) {
+    list.innerHTML = '<div class="search-empty">Xato: ' + esc(e.message) + '</div>';
+  }
+}
+
+const schedAddBtn = document.getElementById("schedAddBtn");
+if (schedAddBtn) {
+  schedAddBtn.onclick = async () => {
+    const text = document.getElementById("schedText").value.trim();
+    const at = document.getElementById("schedAt").value;
+    if (text.length < 2) { toast("Xabar matnini yozing"); return; }
+    if (!at) { toast("Vaqtni tanlang"); return; }
+    try {
+      const d = await api("/api/schedule/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: me.token, text, send_at: at }),
+      });
+      document.getElementById("schedText").value = "";
+      document.getElementById("schedAt").value = "";
+      toast("✅ Reja qo'shildi (" + d.send_at + ")");
+      loadScheduled();
+    } catch (e) { toast(e.message); }
   };
 }
 
@@ -1548,10 +1727,14 @@ async function boot() {
         email: u.email || "",
         phone: u.phone || "",
         avatar: u.avatar || "",
+        daily_limit: u.daily_limit || 0,
+        daily_used: u.daily_used || 0,
+        premium_plan: u.premium_plan || "free",
       };
       cacheUser(me);
       renderUser();
       showChat();
+      updateLimitBadge();
       currentConv = null;
       api("/api/settings?token=" + encodeURIComponent(token)).then((s) => {
         if (s && s.lang) { currentLang = s.lang; applyLang(); }
@@ -2190,3 +2373,37 @@ if (referalApplyBtn) referalApplyBtn.addEventListener("click", async () => {
     document.getElementById("referalApplyInput").value = "";
   } catch (e) { toast(e.message); }
 });
+
+/* ================= Yangiliklar bloki ================= */
+
+async function loadNews() {
+  const sec = document.getElementById("news");
+  if (!sec) return;
+  try {
+    const d = await fetch("/api/news").then((r) => r.json());
+    const list = document.getElementById("newsList");
+    const empty = document.getElementById("newsEmpty");
+    if (!d || !d.ok || !d.items || d.items.length === 0) {
+      if (empty) empty.hidden = false;
+      return;
+    }
+    sec.style.display = "";
+    list.innerHTML = "";
+    const emojis = ["🌍", "🇺🇿", "💼", "⚽", "📈", "🏛", "🎯", "🌐"];
+    d.items.forEach((it, i) => {
+      if (!it.text || it.text.length < 20) return;
+      const el = document.createElement("div");
+      el.className = "news-item";
+      const link = it.link
+        ? ' <a href="' + esc(it.link) + '" target="_blank" rel="noopener">manba →</a>'
+        : "";
+      el.innerHTML = '<span class="n-emoji">' + (emojis[i % emojis.length]) + "</span><p>" + esc(it.text) + link + "</p>";
+      list.appendChild(el);
+    });
+    if (list.children.length === 0 && empty) empty.hidden = false;
+  } catch (e) {
+    const empty = document.getElementById("newsEmpty");
+    if (empty) empty.hidden = false;
+  }
+}
+document.addEventListener("DOMContentLoaded", () => { setTimeout(loadNews, 1200); });
