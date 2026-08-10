@@ -445,6 +445,25 @@ function MsgBubble({ m }: { m: Msg }) {
   const sourceLabel =
     m.source === 'llm' ? 'AI' : m.source === 'facts' ? 'Bilim' : m.source === 'vision' ? 'Tahlil' : m.source === 'gen' ? 'Rasm' : null;
 
+  const renderMedia = () => {
+    if (m.imageUri || (m.mediaUrl && m.mediaKind === 'image')) {
+      const uri = m.imageUri ?? m.mediaUrl;
+      return <Image source={{ uri }} style={styles.bubbleImage} resizeMode="cover" />;
+    }
+    if (m.mediaUrl && m.mediaKind === 'video') {
+      return (
+        <TouchableOpacity
+          style={styles.videoBox}
+          onPress={() => Linking.openURL(m.mediaUrl!).catch(() => {})}
+        >
+          <Text style={styles.videoBoxEmoji}>🎬</Text>
+          <Text style={styles.videoBoxText}>Videoni ochish</Text>
+        </TouchableOpacity>
+      );
+    }
+    return null;
+  };
+
   return (
     <Animated.View
       style={[
@@ -460,24 +479,10 @@ function MsgBubble({ m }: { m: Msg }) {
           </LinearGradient>
         </View>
       )}
-      <View style={m.role === 'user' ? styles.userBubbleWrap : styles.aiBubbleWrap}>
-        {m.imageUri && (
-          <Image source={{ uri: m.imageUri }} style={styles.bubbleImage} resizeMode="cover" />
-        )}
-        {m.mediaUrl && m.mediaKind === 'image' && (
-          <Image source={{ uri: m.mediaUrl }} style={styles.bubbleImage} resizeMode="cover" />
-        )}
-        {m.mediaUrl && m.mediaKind === 'video' && (
-          <TouchableOpacity
-            style={styles.videoBox}
-            onPress={() => Linking.openURL(m.mediaUrl!).catch(() => {})}
-          >
-            <Text style={styles.videoBoxEmoji}>🎬</Text>
-            <Text style={styles.videoBoxText}>Videoni ochish</Text>
-          </TouchableOpacity>
-        )}
-        {!!m.text && (
-          m.role === 'user' ? (
+      {m.role === 'user' ? (
+        <View style={styles.userBubbleOuter}>
+          {renderMedia()}
+          {!!m.text && (
             <LinearGradient
               colors={[C.accent1, C.accent2]}
               style={styles.gradBubble}
@@ -486,18 +491,19 @@ function MsgBubble({ m }: { m: Msg }) {
             >
               <Text style={styles.userText}>{m.text}</Text>
             </LinearGradient>
-          ) : (
-            <View style={styles.aiBubbleWrap}>
-              <Text style={styles.aiText}>{m.text}</Text>
+          )}
+        </View>
+      ) : (
+        <View style={styles.aiBubbleBox}>
+          {renderMedia()}
+          {!!m.text && <Text style={styles.aiText}>{m.text}</Text>}
+          {sourceLabel && (
+            <View style={styles.sourceBadge}>
+              <Text style={styles.sourceText}>{sourceLabel}</Text>
             </View>
-          )
-        )}
-        {m.role === 'ai' && sourceLabel && (
-          <View style={styles.sourceBadge}>
-            <Text style={styles.sourceText}>{sourceLabel}</Text>
-          </View>
-        )}
-      </View>
+          )}
+        </View>
+      )}
     </Animated.View>
   );
 }
@@ -525,7 +531,7 @@ function Typing() {
           <Text style={styles.aiAvatarText}>✦</Text>
         </LinearGradient>
       </View>
-      <View style={[styles.aiBubbleWrap, styles.typingBubble]}>
+      <View style={[styles.aiBubbleBox, styles.typingBubble]}>
         {dots.map((d, i) => (
           <Animated.View
             key={i}
@@ -621,6 +627,11 @@ const styles = StyleSheet.create({
     backgroundColor: C.surface,
     borderBottomWidth: 1,
     borderBottomColor: C.border,
+    shadowColor: '#000',
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 8,
   },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   headerLogoWrap: {
@@ -654,7 +665,7 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 12,
-    backgroundColor: C.surface2,
+    backgroundColor: C.surface3,
     borderWidth: 1,
     borderColor: C.border,
     alignItems: 'center',
@@ -712,6 +723,11 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     paddingHorizontal: 14,
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 5,
   },
   featEmojiWrap: {
     width: 44,
@@ -731,6 +747,11 @@ const styles = StyleSheet.create({
     backgroundColor: C.surface,
     borderWidth: 1,
     borderColor: C.border,
+    shadowColor: '#000',
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 4,
   },
   chipText: { color: C.text, fontSize: 13.5, fontWeight: '600' },
   msgRow: { flexDirection: 'row', marginBottom: 14, alignItems: 'flex-end' },
@@ -750,29 +771,41 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   aiAvatarText: { color: '#fff', fontSize: 13 },
-  userBubbleWrap: { maxWidth: '82%' },
-  gradBubble: {
+  userBubbleOuter: {
+    maxWidth: '82%',
+    overflow: 'hidden',
     borderRadius: 18,
     borderBottomRightRadius: 6,
+  },
+  gradBubble: {
     paddingHorizontal: 14,
     paddingVertical: 10,
   },
-  aiBubbleWrap: {
+  aiBubbleBox: {
     maxWidth: '78%',
     borderRadius: 18,
     borderTopLeftRadius: 6,
     borderWidth: 1.5,
     borderColor: C.border,
     backgroundColor: C.surface,
+    overflow: 'hidden',
     paddingHorizontal: 14,
     paddingVertical: 10,
   },
-  userBubbleOuter: { overflow: 'hidden', borderRadius: 18, borderBottomRightRadius: 6 },
   userText: { color: '#fff', fontSize: 15.5, lineHeight: 22, fontWeight: '600' },
   aiText: { color: C.text, fontSize: 15.5, lineHeight: 22 },
-  sourceBadge: { alignSelf: 'flex-start', marginTop: 5, marginLeft: 2 },
+  sourceBadge: {
+    alignSelf: 'flex-start',
+    marginTop: 7,
+    backgroundColor: C.surface2,
+    borderWidth: 1,
+    borderColor: C.border,
+    borderRadius: 9,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
   sourceText: { color: C.accent2, fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
-  bubbleImage: { width: 230, height: 190, borderRadius: 16, marginBottom: 6 },
+  bubbleImage: { width: 230, height: 190, borderRadius: 12, marginBottom: 8 },
   videoBox: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -810,19 +843,32 @@ const styles = StyleSheet.create({
   },
   updateTrack: { flex: 1, height: 6, borderRadius: 3, backgroundColor: C.border, overflow: 'hidden' },
   updateFill: { height: 6, borderRadius: 3, backgroundColor: C.accent2 },
-  inputWrap: { backgroundColor: C.surface, borderTopWidth: 1, borderTopColor: C.border, paddingTop: 10 },
+  inputWrap: {
+    backgroundColor: 'transparent',
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    shadowColor: '#000',
+    shadowOpacity: 0.55,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 16,
+  },
   inputRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
     gap: 8,
-    paddingHorizontal: 12,
-    borderRadius: 26,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    backgroundColor: '#0f1930',
+    borderRadius: 28,
+    borderWidth: 1.5,
+    borderColor: '#22314f',
   },
   inputBtn: {
     width: 42,
     height: 42,
     borderRadius: 21,
-    backgroundColor: C.surface2,
+    backgroundColor: C.surface3,
     borderWidth: 1,
     borderColor: C.border,
     alignItems: 'center',
@@ -832,16 +878,13 @@ const styles = StyleSheet.create({
   inputBtnText: { fontSize: 17 },
   input: {
     flex: 1,
-    minHeight: 44,
+    minHeight: 42,
     maxHeight: 120,
     color: C.text,
     fontSize: 15.5,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    backgroundColor: C.surface2,
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: C.border,
+    paddingHorizontal: 4,
+    paddingVertical: 9,
+    backgroundColor: 'transparent',
   },
   sendBtn: {
     width: 46,

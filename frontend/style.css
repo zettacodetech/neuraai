@@ -516,10 +516,13 @@ a.accent-btn, a.head-btn { text-decoration: none; display: inline-flex; align-it
 @media (max-width: 900px) {
   .sidebar {
     position: fixed; left: 0; top: 0; bottom: 0; transform: translateX(-105%);
-    transition: transform 0.25s; background: #0a0c1c;
+    transition: transform 0.3s cubic-bezier(.22,1,.36,1); background: rgba(8,10,24,0.96);
+    backdrop-filter: blur(24px);
     padding-top: calc(16px + var(--safe-top));
     padding-bottom: var(--safe-bottom);
     width: min(320px, 88vw); z-index: 6;
+    border-right: 1px solid rgba(143,123,255,0.25);
+    box-shadow: 24px 0 60px rgba(0,0,0,0.5);
   }
   .sidebar.open { transform: none; }
   .hamburger { display: block; }
@@ -576,6 +579,45 @@ a.accent-btn, a.head-btn { text-decoration: none; display: inline-flex; align-it
   .founder-card { flex-direction: column; text-align: center; }
   .founder-social { justify-content: center; }
   .plat-grid, .feat-cards, .support-cards, .model-cards { gap: 10px; }
+}
+
+/* ============ mobil ilova tajribasi ============ */
+@media (max-width: 900px) {
+  /* header — faqat muhim tugmalar */
+  #galleryBtn, #exportBtn, #notesBtn, #aboutBtn { display: none; }
+  #birthdayBtn, #premiumTopBtn { display: none; }
+  .head-btn { padding: 8px 10px; border-radius: 10px; }
+  .head-btn svg { width: 18px; height: 18px; }
+  /* limit badge — kichik sig'imli */
+  .status.limit-low { font-size: 0.72rem; padding: 4px 9px; }
+  /* composer — yumaloq "float" tab uslubida */
+  .composer {
+    background: rgba(10,12,28,0.9);
+    border-radius: 20px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.5), 0 0 0 1px var(--border);
+  }
+  .composer .chips { scrollbar-width: none; }
+  .composer .chips::-webkit-scrollbar { display: none; }
+  .chip { white-space: nowrap; }
+  /* chat maydoni — to'liq kenglik */
+  .chat { padding: 14px 14px 6px; }
+  .row { gap: 9px; }
+  .bubble { border-radius: 16px; }
+  .row.ai .bubble { border-top-left-radius: 6px; }
+  .row.user .bubble { border-top-right-radius: 6px; }
+}
+
+@media (max-width: 520px) {
+  /* 2-qatorda ham kamroq tugma */
+  #exportBtn, #notesBtn { display: none; }
+  #themeBtn, #langBtn { padding: 7px; }
+  .header-actions { gap: 6px; }
+  .model-switch .ms-btn { padding: 6px 7px; font-size: 0.72rem; }
+  #shareBtn span, #searchBtn span, #schedBtn span { display: none; }
+  .status { display: none; }
+  #limitBadge { display: none; }
+  #modelStatus { display: none; }
+  .wa-nav { gap: 2px; }
 }
 
 /* modallar — mayda ekranlarda ham o'rtada qalqib chiqadi (bottom-sheet yo'q) */
