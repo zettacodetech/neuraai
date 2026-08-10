@@ -2232,6 +2232,11 @@ class TwoFaRequest(BaseModel):
     code: str = ""
 
 
+class TwoFaConfirmRequest(BaseModel):
+    token: str = ""
+    code: str = ""
+
+
 @app.post("/api/2fa/setup")
 def twofa_setup(req: TwoFaConfirmRequest) -> JSONResponse:
     """2FA yoqish: yangi maxfiy kalit + Google Authenticator havolasi qaytaradi."""
@@ -2248,11 +2253,6 @@ def twofa_setup(req: TwoFaConfirmRequest) -> JSONResponse:
             "otpauth_url": otpauth_url(secret, user["email"] or user["username"]),
         }
     )
-
-
-class TwoFaConfirmRequest(BaseModel):
-    token: str = ""
-    code: str = ""
 
 
 @app.post("/api/2fa/confirm")
