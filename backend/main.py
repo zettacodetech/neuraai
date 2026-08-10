@@ -967,7 +967,8 @@ def chat_translate(req: SummaryRequest) -> JSONResponse:
             prompt,
             history=[],
             context="",
-            model="local" if llm.llm_available() else "auto",
+            model="fast",
+            fast=True,
         )
     except Exception as e:
         return JSONResponse({"error": f"Tarjima xato: {e}"}, status_code=500)
@@ -1008,13 +1009,14 @@ def chat_summary(req: SummaryRequest) -> JSONResponse:
             prompt,
             history=[],
             context="",
-            model="local" if llm.llm_available() else "auto",
+            model="fast",
+            fast=True,
         )
     except Exception as e:
         return JSONResponse({"error": f"Xulosa xato: {e}"}, status_code=500)
     if not result:
         return JSONResponse(
-            {"error": "Local AI javob bermadi (Ollama server holati tekshiring)"},
+            {"error": "AI javob bermadi, keyinroq urinib ko'ring"},
             status_code=502,
         )
     return JSONResponse({"ok": True, "summary": result})
