@@ -2819,6 +2819,21 @@ def admin_answer(req: AnswerRequest) -> JSONResponse:
     return JSONResponse({"ok": True})
 
 
+class Admin2faResetRequest(BaseModel):
+    key: str = ""
+    user_id: int = 0
+
+
+@app.post("/api/admin/2fa-reset")
+def admin_2fa_reset(req: Admin2faResetRequest) -> JSONResponse:
+    """2FA ni o'chirish (foydalanuvchi kodini yo'qotganda admin yordami)."""
+    if req.key != ADMIN_KEY or req.user_id <= 0:
+        return JSONResponse({"error": "ruxsat yo'q"}, status_code=403)
+    db = get_db()
+    db.set_twofa_secret(req.user_id, None)
+    return JSONResponse({"ok": True})
+
+
 class RunCodeRequest(BaseModel):
     token: str = ""
     code: str = ""
